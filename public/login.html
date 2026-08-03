@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <!-- Meta Pixel Code -->
+    <script>
+        !function (f, b, e, v, n, t, s) {
+            if (f.fbq) return; n = f.fbq = function () {
+                n.callMethod ?
+                    n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+            };
+            if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+            n.queue = []; t = b.createElement(e); t.async = !0;
+            t.src = v; s = b.getElementsByTagName(e)[0];
+            s.parentNode.insertBefore(t, s)
+        }(window, document, 'script',
+            'https://connect.facebook.net/en_US/fbevents.js');
+        fbq('init', '4190907814571632');
+        fbq('track', 'PageView');
+    </script>
+    <noscript><img height="1" width="1" style="display:none"
+            src="https://www.facebook.com/tr?id=4190907814571632&ev=PageView&noscript=1" /></noscript>
+    <!-- End Meta Pixel Code -->
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - aiprodgen</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/index.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <!-- Google Identity Services -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+    </style>
+</head>
+
+<body style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--space-md);">
+    <div style="width: 100%; max-width: 450px;">
+        <!-- Logo -->
+        <div class="text-center mb-md" style="text-align: center;">
+            <a href="/index.html" class="flex items-center justify-center gap-sm" style="font-size: 2rem; font-weight: 800;">
+                <img src="/logo.png" alt="aiprodgen logo" style="width: 48px; height: 48px; border-radius: 16px;">
+                <span>
+                    <span class="text-gradient">Ai</span><span style="color: var(--text-main)">prodgen</span>
+                </span>
+            </a>
+        </div>
+
+        <!-- Login Card -->
+        <div class="card animate-fade-up">
+            <h1 class="h3" style="text-align: center;">Welcome Back</h1>
+            <p class="text-muted mb-md" style="text-align: center;">Enter your credentials to access your account</p>
+
+            <!-- Tabs -->
+            <div class="flex mb-sm" style="border-bottom: 1px solid var(--border-subtle);">
+                <button id="tabLogin" onclick="switchTab('login')"
+                    style="flex: 1; padding-bottom: 0.75rem; font-weight: 600; color: var(--brand-primary); border-bottom: 2px solid var(--brand-primary); background: transparent; border-top: none; border-left: none; border-right: none; cursor: pointer;">Login</button>
+                <button id="tabSignup" onclick="switchTab('signup')"
+                    style="flex: 1; padding-bottom: 0.75rem; font-weight: 600; color: var(--text-muted); border-bottom: 2px solid transparent; background: transparent; border-top: none; border-left: none; border-right: none; cursor: pointer;">Sign Up</button>
+            </div>
+
+            <form id="authForm" onsubmit="handleAuth(event)">
+                <div class="mb-sm">
+                    <label style="display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.5rem;">Email Address</label>
+                    <input type="email" id="email" required class="input-field" placeholder="your@email.com">
+                </div>
+
+                <div id="forgotPasswordLink" style="text-align: right; margin-bottom: 0.5rem;">
+                    <a href="/reset-password.html" class="text-sm" style="color: var(--brand-primary); font-weight: 500;">Forgot your password?</a>
+                </div>
+                <div class="mb-md">
+                    <label style="display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.5rem;">Password</label>
+                    <input type="password" id="password" required class="input-field" placeholder="••••••••">
+                    <p id="passwordHint" class="hidden text-xs mt-1" style="color: var(--text-muted); font-size: 0.75rem;">Must be at least 8 characters</p>
+                </div>
+                <div id="errorMessage" class="hidden mb-sm p-3 rounded-lg text-sm" style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); color: #ef4444;"></div>
+                <button type="submit" id="submitBtn" class="btn btn-primary" style="width: 100%;">
+                    Login
+                </button>
+            </form>
+
+
+
+            <!-- Google Sign-In Divider -->
+            <div class="mt-6 flex items-center gap-4">
+                <div class="flex-1 h-px bg-gray-200"></div>
+                <span class="text-sm text-muted">or</span>
+                <div class="flex-1 h-px bg-gray-200"></div>
+            </div>
+
+            <!-- Google Sign-In Button -->
+            <div class="mt-6">
+                <div id="g_id_onload"
+                    data-client_id="374339940232-7it6pb550qn9rfj2lfg5nb0mda6nocof.apps.googleusercontent.com"
+                    data-context="signin" data-ux_mode="popup" data-callback="handleGoogleSignIn"
+                    data-auto_prompt="false">
+                </div>
+                <div class="g_id_signin" data-type="standard" data-shape="rectangular" data-theme="outline"
+                    data-text="signin_with" data-size="large" data-logo_alignment="left" data-width="100%">
+                </div>
+            </div>
+
+            <div class="mt-6 pt-6 border-t border-gray-200">
+                <p class="text-center text-muted text-sm">
+                    Don't have an account?
+                    <a href="/index.html" class="text-indigo-600 font-medium hover:text-indigo-700">Get Access</a>
+                </p>
+            </div>
+        </div>
+
+        <!-- Change Password Section (shown after login) -->
+        <div id="changePasswordSection" class="hidden bg-white rounded-2xl shadow-xl p-8 mt-6">
+            <h2 class="text-xl font-bold text-gray-900 mb-4">Change Password</h2>
+            <form id="changePasswordForm" onsubmit="handleChangePassword(event)">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
+                    <input type="password" id="currentPassword" required
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">New Password</label>
+                    <input type="password" id="newPassword" required
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Confirm New Password</label>
+                    <input type="password" id="confirmPassword" required
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div id="changePasswordError"
+                    class="hidden mb-4 p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg text-sm"></div>
+                <div id="changePasswordSuccess"
+                    class="hidden mb-4 p-3 bg-green-100 border border-green-300 text-green-700 rounded-lg text-sm">
+                </div>
+                <button type="submit"
+                    class="w-full bg-gray-800 text-white py-3 rounded-lg font-medium hover:bg-gray-700 transition-colors">
+                    Update Password
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Check if already logged in with valid token
+        (async function checkExistingSession() {
+            const token = localStorage.getItem('token');
+            if (token) {
+                try {
+                    const response = await fetch('/api/auth/verify', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.valid) {
+                            console.log('✅ Session valid, redirecting to app');
+                            window.location.href = '/app.html';
+                        } else {
+                            console.warn('❌ Session invalid (server logic), clearing token');
+                            localStorage.removeItem('token');
+                            localStorage.removeItem('userEmail');
+                        }
+                    } else {
+                        console.error('❌ Session check failed:', response.status, response.statusText);
+                        // Optional: show UI error
+                    }
+                } catch (e) {
+                    console.error('❌ Token verification failed (Network/Other):', e);
+                }
+            }
+        })();
+
+        let currentMode = 'login';
+
+        function switchTab(mode) {
+            currentMode = mode;
+            const tabLogin = document.getElementById('tabLogin');
+            const tabSignup = document.getElementById('tabSignup');
+            const submitBtn = document.getElementById('submitBtn');
+            const passwordHint = document.getElementById('passwordHint');
+            const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+
+            // Clear errors
+            document.getElementById('errorMessage').classList.add('hidden');
+
+            if (mode === 'login') {
+                tabLogin.className = 'flex-1 pb-3 font-semibold text-indigo-600 border-b-2 border-indigo-600 transition-colors';
+                tabSignup.className = 'flex-1 pb-3 font-semibold text-muted hover:text-gray-700 transition-colors';
+                submitBtn.textContent = 'Login';
+                passwordHint.classList.add('hidden');
+                forgotPasswordLink.classList.remove('hidden');
+            } else {
+                tabSignup.className = 'flex-1 pb-3 font-semibold text-indigo-600 border-b-2 border-indigo-600 transition-colors';
+                tabLogin.className = 'flex-1 pb-3 font-semibold text-muted hover:text-gray-700 transition-colors';
+                submitBtn.textContent = 'Create Free Account';
+                passwordHint.classList.remove('hidden');
+                forgotPasswordLink.classList.add('hidden');
+            }
+        }
+
+        async function handleAuth(e) {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const errorEl = document.getElementById('errorMessage');
+            const submitBtn = document.getElementById('submitBtn');
+
+            errorEl.classList.add('hidden');
+            submitBtn.disabled = true;
+            submitBtn.textContent = currentMode === 'login' ? 'Logging in...' : 'Creating Account...';
+
+            const endpoint = currentMode === 'login' ? '/api/auth/login' : '/api/auth/signup';
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                // Store token and redirect
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('userEmail', data.email);
+                window.location.href = '/app.html';
+
+            } catch (error) {
+                errorEl.textContent = error.message;
+                errorEl.classList.remove('hidden');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = currentMode === 'login' ? 'Login' : 'Create Free Account';
+            }
+        }
+
+        async function handleChangePassword(e) {
+            e.preventDefault();
+            const currentPassword = document.getElementById('currentPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            const errorEl = document.getElementById('changePasswordError');
+            const successEl = document.getElementById('changePasswordSuccess');
+
+            errorEl.classList.add('hidden');
+            successEl.classList.add('hidden');
+
+            if (newPassword !== confirmPassword) {
+                errorEl.textContent = 'New passwords do not match';
+                errorEl.classList.remove('hidden');
+                return;
+            }
+
+            if (newPassword.length < 8) {
+                errorEl.textContent = 'New password must be at least 8 characters';
+                errorEl.classList.remove('hidden');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/auth/change-password', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({
+                        email: localStorage.getItem('userEmail'),
+                        oldPassword: currentPassword,
+                        newPassword
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                successEl.textContent = 'Password updated successfully!';
+                successEl.classList.remove('hidden');
+                document.getElementById('changePasswordForm').reset();
+
+            } catch (error) {
+                errorEl.textContent = error.message;
+                errorEl.classList.remove('hidden');
+            }
+        }
+
+        // Google Sign-In Handler
+        async function handleGoogleSignIn(response) {
+            const errorEl = document.getElementById('errorMessage');
+            errorEl.classList.add('hidden');
+
+            try {
+                const res = await fetch('/api/auth/google', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ credential: response.credential })
+                });
+
+                const data = await res.json();
+
+                if (data.error) {
+                    errorEl.textContent = data.error;
+                    errorEl.classList.remove('hidden');
+                    return;
+                }
+
+                // Store token and redirect
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('userEmail', data.email);
+                window.location.href = '/app.html';
+
+            } catch (error) {
+                errorEl.textContent = 'Google sign-in failed. Please try again.';
+                errorEl.classList.remove('hidden');
+            }
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,9 @@
+{
+  "rewrites": [
+    { "source": "/api/generate", "destination": "/api/generate" },
+    { "source": "/api/generations/(.*)", "destination": "/api/generations/$1" },
+    { "source": "/api/keys/add", "destination": "/api/keys/add" },
+    { "source": "/api/webhooks/razorpay", "destination": "/api/webhooks/razorpay" },
+    { "source": "/api/(.*)", "destination": "/api/index" }
+  ]
+}

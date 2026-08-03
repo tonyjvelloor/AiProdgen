@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Allow: /wall.html
+Disallow: /app.html
+Disallow: /dashboard.html
+Disallow: /admin.html
+
+Sitemap: https://aiprodgen.online/sitemap.xml

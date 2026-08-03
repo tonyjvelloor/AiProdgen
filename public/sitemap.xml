@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+        <loc>https://aiprodgen.online/</loc>
+        <lastmod>2026-02-23</lastmod>
+        <changefreq>daily</changefreq>
+        <priority>1.0</priority>
+    </url>
+    <url>
+        <loc>https://aiprodgen.online/landing.html</loc>
+        <lastmod>2026-02-23</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.8</priority>
+    </url>
+    <url>
+        <loc>https://aiprodgen.online/pricing.html</loc>
+        <lastmod>2026-02-23</lastmod>
+        <changefreq>daily</changefreq>
+        <priority>0.5</priority> <!-- Changed from 0.8 to 0.5 -->
+    </url>
+    <url>
+        <loc>https://aiprodgen.online/features.html</loc>
+        <lastmod>2026-02-23</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.5</priority> <!-- Changed from 0.8 to 0.5 -->
+    </url>
+    <url>
+        <loc>https://aiprodgen.online/login.html</loc>
+        <lastmod>2026-02-23</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.5</priority>
+    </url>
+</urlset>

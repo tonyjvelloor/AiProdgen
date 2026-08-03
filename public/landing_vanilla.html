@@ -1,0 +1,1751 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <link rel="icon" type="image/png" href="/favicon.png">
+
+    <!-- Meta Pixel Code -->
+    <script>
+        !function (f, b, e, v, n, t, s) {
+            if (f.fbq) return; n = f.fbq = function () {
+                n.callMethod ?
+                    n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+            };
+            if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+            n.queue = []; t = b.createElement(e); t.async = !0;
+            t.src = v; s = b.getElementsByTagName(e)[0];
+            s.parentNode.insertBefore(t, s)
+        }(window, document, 'script',
+            'https://connect.facebook.net/en_US/fbevents.js');
+        fbq('init', '4190907814571632');
+        fbq('track', 'PageView');
+    </script>
+    <noscript><img height="1" width="1" style="display:none"
+            src="https://www.facebook.com/tr?id=4190907814571632&ev=PageView&noscript=1" /></noscript>
+    <!-- End Meta Pixel Code -->
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aiprodgen - AI Product Photography Generator & Background Replacement</title>
+    <meta name="description"
+        content="Turn basic product photos into professional marketing assets in seconds with our AI product photography generator. Remove backgrounds, stage lifestyle shots, and save thousands on photoshoots.">
+    <meta name="keywords"
+        content="AI product photography generator, AI product background replacement, AI lifestyle staging, ecommerce photography, product photo generator">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://aiprodgen.online/">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://aiprodgen.online/">
+    <meta property="og:title" content="Aiprodgen - Professional Product Photos in Seconds">
+    <meta property="og:description"
+        content="Generate stunning product images and marketing copy with AI. One-time payment, lifetime access.">
+    <meta property="og:image" content="https://aiprodgen.online/aiprodgen-hero.jpg">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://aiprodgen.online/">
+    <meta property="twitter:title" content="Aiprodgen - Professional Product Photos in Seconds">
+    <meta property="twitter:description"
+        content="Generate stunning product images and marketing copy with AI. One-time payment, lifetime access.">
+    <meta property="twitter:image" content="https://aiprodgen.online/aiprodgen-hero.jpg">
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Aiprodgen",
+      "applicationCategory": "DesignApplication",
+      "operatingSystem": "Web",
+      "description": "AI product photography generator that turns basic photos into professional lifestyle shots and marketing assets.",
+      "offers": {
+        "@type": "Offer",
+        "price": "47.00",
+        "priceCurrency": "USD"
+      },
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.9",
+        "ratingCount": "4125",
+        "bestRating": "5",
+        "worstRating": "1"
+      }
+    }
+    </script>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/index.css">
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <style>
+        html {
+            background-color: #111827;
+            /* gray-900 matches footer */
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #f9fafb;
+            /* gray-50 */
+            min-height: 100vh;
+        }
+
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: transparent;
+        }
+
+        .sticky-cta {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 40;
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+            display: none;
+        }
+
+        .sticky-cta.visible {
+            display: block;
+            transform: translateY(0);
+        }
+
+        @media (min-width: 768px) {
+            /* Desktop Styles if needed override */
+        }
+
+        /* Exit Intent Popup */
+        .exit-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            z-index: 9998;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .exit-modal-backdrop.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .exit-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.95);
+            z-index: 9999;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        .exit-modal.show {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        .floating {
+            animation: floating 3s ease-in-out infinite;
+        }
+
+        @keyframes floating {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-10px);
+            }
+        }
+
+        .pulse-badge {
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.05);
+            }
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        .cta-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 30px rgba(102, 126, 234, 0.4);
+        }
+
+        /* Marquee Styles */
+        .marquee-container {
+            overflow: hidden;
+            white-space: nowrap;
+            position: relative;
+        }
+
+        .marquee-content {
+            display: inline-block;
+            animation: marquee 40s linear infinite;
+        }
+
+        .marquee-content:hover {
+            animation-play-state: paused;
+        }
+
+        @keyframes marquee {
+            0% {
+                transform: translateX(0);
+            }
+
+            100% {
+                transform: translateX(-50%);
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 overflow-x-hidden">
+    <!-- Top Banner -->
+    <div class="gradient-bg text-white text-center py-3 px-4">
+        <p class="text-sm md:text-base font-medium">
+            🔥 <span class="font-bold">Pay Once, Use Forever</span> – Just <span data-price-key="offer">$47</span>
+            (Competitors charge <span data-price-key="competitor_canva_mo">$15</span>–<span
+                data-price-key="competitor_flair_mo">$25</span>/month)
+            <span class="bg-white/20 px-2 py-1 rounded ml-2 text-xs">Save 97%</span>
+        </p>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4 flex justify-between items-center">
+            <!-- Logo -->
+            <a href="#" class="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+                <img src="/logo.png" alt="aiprodgen logo" class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl">
+                <span class="font-bold text-lg sm:text-2xl flex items-center">
+                    <span
+                        class="bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 animate-gradient">Ai</span><span
+                        class="text-gray-900 dark:text-white">prodgen</span>
+                </span>
+            </a>
+            <div class="flex items-center gap-2 sm:gap-4">
+                <a href="#features" class="hidden md:block text-muted hover:text-gray-900">Features</a>
+                <a href="#pricing" class="hidden md:block text-muted hover:text-gray-900">Pricing</a>
+                <a href="/login.html"
+                    class="text-indigo-600 font-medium hover:text-indigo-700 text-xs sm:text-base">Login</a>
+
+                <!-- Currency Toggle -->
+                <button id="currencyToggle" onclick="toggleCurrency()"
+                    class="flex items-center gap-1 bg-gray-100 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-bold text-gray-700 hover:bg-gray-200 transition-colors">
+                    <span id="currencyFlag">🇺🇸</span> <span id="currencyCode" class="hidden sm:inline">USD</span>
+                </button>
+
+                <button onclick="scrollToPricing()"
+                    class="btn btn-primary">Get
+                    Access</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section (Consolidated) -->
+
+    </section>
+
+    <!-- Hero Section -->
+    <section class="py-16 md:py-24 px-4 bg-gradient-to-b from-white to-gray-50">
+        <div class="max-w-7xl mx-auto">
+            <div class="flex flex-col md:grid md:grid-cols-2 gap-12 items-center">
+                <div class="order-2 md:order-1">
+                    <div class="inline-flex items-center bg-indigo-100 text-indigo-700 px-4 py-2 rounded-full text-sm
+                        font-medium mb-6">
+                        ✨ AI-Powered Product Photography
+                    </div>
+                    <h1 class="text-3xl md:text-5xl lg:text-6xl font-extrabold text-gray-900 leading-tight mb-6">
+                        Professional Product Photos <span class="gradient-text">Without the Studio Cost</span>
+                    </h1>
+                    <p class="text-xl text-muted mb-8">
+                        Turn basic product shots into premium marketing assets in seconds. Used by 4,000+ sellers to
+                        save
+                        <span data-price-key="savings_mo">$4,800</span>+/month.
+                    </p>
+                    <div class="flex flex-col sm:flex-row gap-4 mb-8">
+                        <button onclick="scrollToPricing()" class="btn btn-primary">
+                            <span>Get Lifetime Access - <span data-price-key="offer">$47</span></span>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5
+                                    5m0 0l-5 5m5-5H6" />
+                            </svg>
+                        </button>
+                        <a href="#demo" class="border-2 border-gray-300 text-gray-700 px-8 py-4 rounded-xl font-bold
+                            text-lg hover:border-gray-400 flex items-center justify-center gap-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752
+                                    11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0
+                                    000-1.664z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9
+                                    9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Watch Demo
+                        </a>
+                    </div>
+                    <!-- Social Proof Stats -->
+                    <div class="grid grid-cols-3 gap-4 py-6 border-t border-b border-gray-200">
+                        <div class="text-center">
+                            <div class="text-2xl md:text-3xl font-bold text-indigo-600">120K+</div>
+                            <div class="text-xs text-muted">Images Generated</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-2xl md:text-3xl font-bold text-indigo-600">4,000+</div>
+                            <div class="text-xs text-muted">Happy Users</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-2xl md:text-3xl font-bold text-indigo-600">45%</div>
+                            <div class="text-xs text-muted">Conversion Boost</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-6 text-sm text-muted mt-4">
+                        <div class="flex items-center gap-2">
+                            <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0
+                                    00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                            One-time payment
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0
+                                    00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                            Lifetime access
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0
+                                    00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                            No monthly fees
+                        </div>
+                    </div>
+                </div>
+
+
+
+
+                <div class="relative w-full order-1 md:order-2">
+                    <div
+                        class="floating bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100 relative w-full aspect-square min-h-[300px] md:min-h-0">
+                        <div id="hero-carousel" class="absolute inset-0">
+                            <img src="/landing-v2/sq_slide1.png"
+                                class="carousel-slide absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 opacity-100"
+                                alt="Comparison 1">
+                            <img src="/landing-v2/sq_slide2.png"
+                                class="carousel-slide absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 opacity-0"
+                                alt="Comparison 2">
+                            <img src="/landing-v2/sq_slide3.png"
+                                class="carousel-slide absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 opacity-0"
+                                alt="Comparison 3">
+                            <img src="/landing-v2/sq_slide4.png"
+                                class="carousel-slide absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 opacity-0"
+                                alt="Comparison 4">
+                        </div>
+                    </div>
+                    <div
+                        class="absolute -bottom-4 -right-4 bg-yellow-400 text-yellow-900 px-4 py-2 rounded-lg font-bold text-sm pulse-badge shadow-lg z-10">
+                        💰 Save 90%+ vs Monthly Tools!
+                    </div>
+                </div>
+
+                <script>
+                    document.addEventListener('DOMContentLoaded', () => {
+                        const slides = document.querySelectorAll('.carousel-slide');
+                        let currentSlide = 0;
+
+                        setInterval(() => {
+                            slides[currentSlide].classList.remove('opacity-100');
+                            slides[currentSlide].classList.add('opacity-0');
+
+                            currentSlide = (currentSlide + 1) % slides.length;
+
+                            slides[currentSlide].classList.remove('opacity-0');
+                            slides[currentSlide].classList.add('opacity-100');
+                        }, 3000);
+                    });
+                </script>
+            </div>
+        </div>
+    </section>
+
+    <!-- Real Results Showcase -->
+    <section class="py-16 md:py-20 px-4 bg-gradient-to-b from-gray-50 to-white">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-12">
+                <div
+                    class="inline-flex items-center bg-green-100 text-green-700 px-4 py-2 rounded-full text-sm font-medium mb-6">
+                    ✨ Real Results from Real Users
+                </div>
+                <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">See What You Can Create <span
+                        class="gradient-text">In Minutes</span></h2>
+                <p class="text-xl text-muted max-w-2xl mx-auto">From a single product photo to complete lifestyle
+                    campaigns. AI-generated model shots, multiple angles, and professional staging.</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-6 md:gap-8">
+                <!-- Showcase Item 1 - Backpack -->
+                <div class="group relative overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all">
+                    <img src="/showcase/backpack.jpg"
+                        alt="AI generated lifestyle photography of a leather backpack on a mountain setting"
+                        class="w-full h-auto object-cover">
+                    <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-6">
+                        <span class="text-white/80 text-sm font-medium uppercase tracking-wider">Fashion
+                            Accessories</span>
+                        <p class="text-white font-bold text-lg mt-1">1 Photo → 6 Model Shots</p>
+                    </div>
+                </div>
+
+                <!-- Showcase Item 2 - Hat -->
+                <div class="group relative overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all">
+                    <img src="/showcase/hat.jpg"
+                        alt="AI generated sports lifestyle campaign featuring a golf hat on a course"
+                        class="w-full h-auto object-cover">
+                    <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-6">
+                        <span class="text-white/80 text-sm font-medium uppercase tracking-wider">Sports &
+                            Lifestyle</span>
+                        <p class="text-white font-bold text-lg mt-1">Complete Golf Campaign</p>
+                    </div>
+                </div>
+
+                <!-- Showcase Item 3 - Sweater -->
+                <div class="group relative overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all">
+                    <img src="/showcase/sweater.jpg"
+                        alt="AI generated fashion model wearing an argyle sweater in a multi-scene lookbook"
+                        class="w-full h-auto object-cover">
+                    <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-6">
+                        <span class="text-white/80 text-sm font-medium uppercase tracking-wider">Apparel</span>
+                        <p class="text-white font-bold text-lg mt-1">Multi-Scene Lookbook</p>
+                    </div>
+                </div>
+
+                <!-- Showcase Item 4 - Jacket -->
+                <div class="group relative overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all">
+                    <img src="/showcase/jacket.jpg"
+                        alt="AI generated professional studio photography of a premium leather jacket"
+                        class="w-full h-auto object-cover">
+                    <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-6">
+                        <span class="text-white/80 text-sm font-medium uppercase tracking-wider">Premium Fashion</span>
+                        <p class="text-white font-bold text-lg mt-1">Studio-Quality Model Shots</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-center mt-10">
+                <button onclick="scrollToPricing()"
+                    class="btn btn-primary">
+                    Create Your Own Shots
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Wall of Love Marquee -->
+    <section class="py-6 md:py-10 bg-gray-50 border-b border-gray-100 overflow-hidden">
+        <p class="text-center text-sm font-bold text-muted uppercase tracking-widest mb-4 md:mb-8">Joined by 4,000+
+            Founders
+            & Marketers</p>
+        <div class="marquee-container">
+            <div class="marquee-content" id="marqueeReviewContent">
+                <!-- Content injected via JS for duplication -->
+            </div>
+        </div>
+    </section>
+
+    <!-- JS for Marquee -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Scroll Marquee Logic
+            const reviews = [
+                "🔥 Best investment for my Etsy shop!",
+                "Saved me $2000 on my first launch 💸",
+                "The AI quality is insane 🤯",
+                "Finally no monthly subscriptions!",
+                "Aiprodgen > Midjourney for products",
+                "Took 5 mins to setup, results are pro level",
+                "My conversion rate doubled 📈",
+                "Love the dark mode UI",
+                "Support is super fast",
+                "Recommended by my mentor",
+                "Just buy it. It's a no brainer.",
+                "Obsessed with the fashion model mode"
+            ];
+
+            const marqueeTrack = document.getElementById('marqueeReviewContent');
+            const reviewString = reviews.map(r =>
+                `<span class="inline-block bg-white border border-gray-200 rounded-full px-6 py-2 text-sm font-medium text-gray-700 mx-4 shadow-sm">⭐️⭐️⭐️⭐️⭐️ ${r}</span>`
+            ).join('');
+
+            // Duplicate for infinite scroll effect
+            marqueeTrack.innerHTML = reviewString + reviewString;
+        });
+    </script>
+
+    <!-- How It Works Section -->
+    <section class="py-16 px-4 bg-white border-b border-gray-100">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl font-bold text-gray-900">How It Works</h2>
+                <p class="text-muted mt-2">Professional results in 3 simple steps</p>
+            </div>
+            <div class="grid md:grid-cols-3 gap-8 text-center relative">
+                <!-- Connecting Line (Desktop) -->
+                <div class="hidden md:block absolute top-12 left-[20%] right-[20%] h-0.5 bg-gray-200 -z-10"></div>
+
+                <div class="bg-white p-6 rounded-xl relative">
+                    <div
+                        class="w-24 h-24 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-6 text-4xl shadow-sm border border-indigo-100">
+                        📤
+                    </div>
+                    <h3 class="font-bold text-xl mb-2">1. Upload Photo</h3>
+                    <p class="text-muted">Upload your raw product photo. Our AI automatically removes the background.
+                    </p>
+                </div>
+                <div class="bg-white p-6 rounded-xl relative">
+                    <div
+                        class="w-24 h-24 bg-purple-50 rounded-full flex items-center justify-center mx-auto mb-6 text-4xl shadow-sm border border-purple-100">
+                        ✨
+                    </div>
+                    <h3 class="font-bold text-xl mb-2">2. Select Mode</h3>
+                    <p class="text-muted">Choose Product Shot, Fashion Model, or Creative Mode based on your needs.
+                    </p>
+                </div>
+                <div class="bg-white p-6 rounded-xl relative">
+                    <div
+                        class="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6 text-4xl shadow-sm border border-green-100">
+                        ⬇️
+                    </div>
+                    <h3 class="font-bold text-xl mb-2">3. Generate Assets</h3>
+                    <p class="text-muted">Instantly get 6 professional variations in high resolution. Export and
+                        share.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Mid-Page Grid Showcase (Visual Break) -->
+    <section class="relative min-h-[60vh] overflow-hidden">
+        <!-- Grid Background Image -->
+        <div class="absolute inset-0">
+            <img src="/aiprodgen-hero.jpg" alt="Aiprodgen - AI Generated Product Photography"
+                class="w-full h-full object-cover">
+            <!-- Dark Overlay for Text Readability -->
+            <div class="absolute inset-0 bg-gradient-to-b from-black/40 via-black/50 to-black/60"></div>
+        </div>
+
+        <!-- Overlaid Content -->
+        <div class="relative z-10 flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+            <h2 class="text-3xl md:text-5xl font-extrabold text-white mb-6 max-w-4xl leading-tight drop-shadow-2xl">
+                Create Stunning Visuals <span
+                    class="bg-clip-text text-transparent bg-gradient-to-r from-yellow-400 via-amber-400 to-orange-400">Instantly</span>
+            </h2>
+            <p class="text-xl text-white/90 mb-10 max-w-2xl">
+                Join thousands of sellers creating professional product photos without the studio price tag.
+            </p>
+            <button onclick="scrollToPricing()"
+                class="bg-white text-gray-900 px-10 py-5 rounded-2xl font-bold text-lg hover:bg-gray-100 transition-all shadow-2xl hover:scale-105 transform">
+                Get Lifetime Access – Just <span data-price-key="offer">$47</span>
+            </button>
+        </div>
+    </section>
+
+    <!-- Problem Section -->
+    <section class="py-16 px-4 bg-gray-900 text-white">
+        <div class="max-w-4xl mx-auto text-center">
+            <h2 class="text-2xl md:text-4xl font-bold mb-8">Creating Product Content is <span
+                    class="text-red-400">Expensive & Time-Consuming</span></h2>
+            <div class="grid md:grid-cols-3 gap-8 mb-12">
+                <div class="bg-gray-800 rounded-xl p-6">
+                    <div class="text-4xl mb-4">📸</div>
+                    <h3 class="font-bold text-xl mb-2">Pro Photography</h3>
+                    <p class="text-muted"><span data-price-key="competitor_photo_shoot">$500</span>–$2,000 per shoot
+                    </p>
+                </div>
+                <div class="bg-gray-800 rounded-xl p-6">
+                    <div class="text-4xl mb-4">✍️</div>
+                    <h3 class="font-bold text-xl mb-2">Copywriters</h3>
+                    <p class="text-muted"><span data-price-key="competitor_copy">$100</span> - $500 per product
+                        description</p>
+                </div>
+                <div class="bg-gray-800 rounded-xl p-6">
+                    <div class="text-4xl mb-4">⏰</div>
+                    <h3 class="font-bold text-xl mb-2">Time & Effort</h3>
+                    <p class="text-muted">Days to weeks of back-and-forth</p>
+                </div>
+            </div>
+            <p class="text-xl text-muted">What if you could do all of this in <span
+                    class="text-green-400 font-bold">under 60 seconds</span>?</p>
+        </div>
+    </section>
+
+    <!-- Inspiration Gallery -->
+    <section class="py-20 px-4 bg-gray-50">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-16">
+                <div
+                    class="inline-flex items-center bg-indigo-100 text-indigo-700 px-4 py-2 rounded-full text-sm font-medium mb-6">
+                    🖼️ Made with aiprodgen
+                </div>
+                <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">High-converting lifestyle photos, <span
+                        class="gradient-text">generated in seconds.</span></h2>
+                <p class="text-xl text-muted max-w-2xl mx-auto">Pro Photography. AI Speed.</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Gallery Item 1 -->
+                <div
+                    class="group relative overflow-hidden rounded-2xl shadow-lg transition-all hover:-translate-y-2 hover:shadow-2xl">
+                    <img src="/landing-v2/perfume.png"
+                        alt="AI generated luxury perfume bottle placed on a marble surface with dramatic lighting"
+                        class="w-full h-80 object-cover">
+                    <div
+                        class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-6">
+                        <span class="text-white font-bold text-sm uppercase tracking-wider">Product Shot Mode</span>
+                    </div>
+                </div>
+
+                <!-- Gallery Item 2 -->
+                <div
+                    class="group relative overflow-hidden rounded-2xl shadow-lg transition-all hover:-translate-y-2 hover:shadow-2xl">
+                    <img src="/landing-v2/sneaker.png"
+                        alt="AI generated creative sneaker photography with dynamic water splash effects"
+                        class="w-full h-80 object-cover">
+                    <div
+                        class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-6">
+                        <span class="text-white font-bold text-sm uppercase tracking-wider">Creative Mode</span>
+                    </div>
+                </div>
+
+                <!-- Gallery Item 3 -->
+                <div
+                    class="group relative overflow-hidden rounded-2xl shadow-lg transition-all hover:-translate-y-2 hover:shadow-2xl">
+                    <img src="/landing-v2/skincare.png"
+                        alt="AI generated skincare serum bottle in a relaxing spa theme setting"
+                        class="w-full h-80 object-cover">
+                    <div
+                        class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-6">
+                        <span class="text-white font-bold text-sm uppercase tracking-wider">Spa Theme</span>
+                    </div>
+                </div>
+
+                <!-- Gallery Item 4 -->
+                <div
+                    class="group relative overflow-hidden rounded-2xl shadow-lg transition-all hover:-translate-y-2 hover:shadow-2xl">
+                    <img src="/landing-v2/coffee.png"
+                        alt="AI generated organic coffee bag presentation in a warm lifestyle kitchen setup"
+                        class="w-full h-80 object-cover">
+                    <div
+                        class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-6">
+                        <span class="text-white font-bold text-sm uppercase tracking-wider">Lifestyle Shot</span>
+                    </div>
+                </div>
+
+                <!-- Gallery Item 5 -->
+                <div
+                    class="group relative overflow-hidden rounded-2xl shadow-lg transition-all hover:-translate-y-2 hover:shadow-2xl">
+                    <img src="/landing-v2/furniture.png"
+                        alt="AI generated modern armchair staged beautifully in a bright minimalist interior design"
+                        class="w-full h-80 object-cover">
+                    <div
+                        class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-6">
+                        <span class="text-white font-bold text-sm uppercase tracking-wider">Interior Design</span>
+                    </div>
+                </div>
+
+                <!-- Gallery Item 6 -->
+                <div
+                    class="group relative overflow-hidden rounded-2xl shadow-lg transition-all hover:-translate-y-2 hover:shadow-2xl">
+                    <img src="/landing-v2/jewelry.png"
+                        alt="AI generated high-detail macro photography of a gold ring on dark background"
+                        class="w-full h-80 object-cover">
+                    <div
+                        class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-6">
+                        <span class="text-white font-bold text-sm uppercase tracking-wider">Macro Mode</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-center mt-12">
+                <button onclick="scrollToPricing()"
+                    class="inline-flex items-center gap-2 border-2 border-indigo-600 text-indigo-600 px-8 py-3 rounded-xl font-bold hover:bg-indigo-50 transition-colors">
+                    Start Creating Now
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="py-20 px-4 bg-white">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Everything You Need to Create <span
+                        class="gradient-text">Stunning Product Content</span></h2>
+                <p class="text-xl text-muted max-w-2xl mx-auto">One tool to generate professional product images and
+                    compelling marketing copy powered by Google's latest AI models.</p>
+            </div>
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- Feature Cards -->
+                <div class="feature-card bg-white border border-gray-200 rounded-2xl p-8 transition-all duration-300">
+                    <div class="w-14 h-14 gradient-bg rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 6h16M4 12h16m-7 6h7" />
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-3">Smart Generation Modes</h3>
+                    <p class="text-muted">Dedicated workflows for Product Shots, Fashion Models, and Marketing Copy.
+                        Focused interfaces for every task.</p>
+                </div>
+                <div class="feature-card bg-white border border-gray-200 rounded-2xl p-8 transition-all duration-300">
+                    <div class="w-14 h-14 gradient-bg rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-3">AI Fashion Models</h3>
+                    <p class="text-muted">Turn simple mannequin shots into professional model photography. Choose
+                        ethnicity, gender, and style instantly. No casting needed.</p>
+                </div>
+                <div class="feature-card bg-white border border-gray-200 rounded-2xl p-8 transition-all duration-300">
+                    <div class="w-14 h-14 gradient-bg rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-3">Image Upload & Edit</h3>
+                    <p class="text-muted">Upload your own product photos and let AI enhance, edit backgrounds, or
+                        create variations from your existing images.</p>
+                </div>
+                <div class="feature-card bg-white border border-gray-200 rounded-2xl p-8 transition-all duration-300">
+                    <div class="w-14 h-14 gradient-bg rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-3">4K/8K Upscaling</h3>
+                    <p class="text-muted">Upscale your generated images to print-ready 4K or 8K resolution using
+                        Real-ESRGAN technology. Crystal clear details.</p>
+                </div>
+                <div class="feature-card bg-white border border-gray-200 rounded-2xl p-8 transition-all duration-300">
+                    <div class="w-14 h-14 gradient-bg rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-3">Dark Mode & Clean UI</h3>
+                    <p class="text-muted">A stunning, distraction-free interface with full Dark Mode support.
+                        Designed for late-night creativity.</p>
+                </div>
+                <div class="feature-card bg-white border border-gray-200 rounded-2xl p-8 transition-all duration-300">
+                    <div class="w-14 h-14 gradient-bg rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-3">Your Own API Key</h3>
+                    <p class="text-muted">Use your own Google AI API key for unlimited generations. No per-image
+                        charges from us, ever.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+
+    <!-- Testimonials Section -->
+    <section class="py-20 px-4 bg-white">
+        <div class="max-w-6xl mx-auto">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Trusted by <span
+                        class="gradient-text">4,000+ Sellers</span></h2>
+                <p class="text-xl text-muted">Real results from real businesses</p>
+            </div>
+            <div class="grid md:grid-cols-3 gap-8">
+                <!-- Testimonial 1 -->
+                <div
+                    class="bg-gradient-to-br from-gray-50 to-white rounded-2xl p-8 border border-gray-100 shadow-sm hover:shadow-lg transition-shadow">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-yellow-400 text-xl">★★★★★</span>
+                        <span class="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full">Verified
+                            Buyer</span>
+                    </div>
+                    <p class="text-gray-700 mb-4">"I was spending <span class="font-bold text-gray-900"><span
+                                data-price-key="competitor_photo_shoot">$500</span> per
+                            product</span> on photography. Now I generate professional images in seconds."</p>
+                    <div class="bg-indigo-50 rounded-lg p-3 mb-6">
+                        <p class="text-indigo-700 font-semibold text-sm">📈 Result: Saved <span
+                                data-price-key="savings_mo">$4,800</span>/month on photo costs
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <img src="testimonials/sarah.png" alt="Sarah R"
+                            class="w-12 h-12 rounded-full object-cover border-2 border-white shadow">
+                        <div>
+                            <p class="font-bold text-gray-900">Sarah Rodriguez</p>
+                            <p class="text-sm text-muted">Etsy Seller • 500+ Products</p>
+                        </div>
+                    </div>
+                </div>
+                <!-- Testimonial 2 -->
+                <div
+                    class="bg-gradient-to-br from-gray-50 to-white rounded-2xl p-8 border border-gray-100 shadow-sm hover:shadow-lg transition-shadow">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-yellow-400 text-xl">★★★★★</span>
+                        <span class="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full">Verified
+                            Buyer</span>
+                    </div>
+                    <p class="text-gray-700 mb-4">"The marketing copy feature alone is worth the price. My product
+                        descriptions now <span class="font-bold text-gray-900">convert visitors into buyers</span>."
+                    </p>
+                    <div class="bg-indigo-50 rounded-lg p-3 mb-6">
+                        <p class="text-indigo-700 font-semibold text-sm">📈 Result: 40% increase in conversion rate</p>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <img src="testimonials/mike.png" alt="Mike K"
+                            class="w-12 h-12 rounded-full object-cover border-2 border-white shadow">
+                        <div>
+                            <p class="font-bold text-gray-900">Michael Kim</p>
+                            <p class="text-sm text-muted">Shopify Store Owner • $50K/mo</p>
+                        </div>
+                    </div>
+                </div>
+                <!-- Testimonial 3 -->
+                <div
+                    class="bg-gradient-to-br from-gray-50 to-white rounded-2xl p-8 border border-gray-100 shadow-sm hover:shadow-lg transition-shadow">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-yellow-400 text-xl">★★★★★</span>
+                        <span class="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full">Verified
+                            Buyer</span>
+                    </div>
+                    <p class="text-gray-700 mb-4">"As a dropshipper, I struggled with <span
+                            class="font-bold text-gray-900">poor supplier images</span>. Now my listings look premium
+                        and professional!"</p>
+                    <div class="bg-indigo-50 rounded-lg p-3 mb-6">
+                        <p class="text-indigo-700 font-semibold text-sm">📈 Result: 3x more sales in the first month</p>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <img src="testimonials/jennifer.png" alt="Jennifer L"
+                            class="w-12 h-12 rounded-full object-cover border-2 border-white shadow">
+                        <div>
+                            <p class="font-bold text-gray-900">Jennifer Lee</p>
+                            <p class="text-sm text-muted">Dropshipping Entrepreneur</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Trust Badges -->
+            <div class="mt-12 flex flex-wrap justify-center items-center gap-8 text-muted">
+                <div class="flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd"
+                            d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                            clip-rule="evenodd"></path>
+                    </svg>
+                    <span class="text-sm font-medium">SSL Secured</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd"
+                            d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                            clip-rule="evenodd"></path>
+                    </svg>
+                    <span class="text-sm font-medium">7-Day Guarantee</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path
+                            d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z">
+                        </path>
+                    </svg>
+                    <span class="text-sm font-medium">4.9/5 Rating</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+
+    <!-- Marketplace Compatibility Section -->
+    <section class="py-12 bg-white border-t border-gray-100">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <p class="text-muted font-bold mb-8 text-lg uppercase tracking-wide">Suitable for all marketplaces,
+                platforms, and channels</p>
+            <img src="/marketplace-logos.png" alt="Marketplaces including Amazon, eBay, Etsy, etc."
+                class="h-10 md:h-14 mx-auto object-contain opacity-60 hover:opacity-100 transition-opacity filter grayscale hover:grayscale-0 duration-300">
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="py-20 px-4 bg-gray-50">
+        <div class="max-w-4xl mx-auto">
+            <div class="text-center mb-12">
+                <div
+                    class="inline-flex items-center bg-red-100 text-red-700 px-4 py-2 rounded-full text-sm font-bold mb-6 pulse-badge">
+                    🔥 FOUNDER'S SPECIAL - LIMITED TIME ONLY
+                </div>
+                <!-- Countdown Timer -->
+                <div class="flex justify-center gap-4 mb-6">
+                    <div class="bg-gray-900 text-white rounded-lg p-4 min-w-[80px]">
+                        <div id="countdown-days" class="text-3xl font-bold">02</div>
+                        <div class="text-xs text-muted uppercase">Days</div>
+                    </div>
+                    <div class="bg-gray-900 text-white rounded-lg p-4 min-w-[80px]">
+                        <div id="countdown-hours" class="text-3xl font-bold">11</div>
+                        <div class="text-xs text-muted uppercase">Hours</div>
+                    </div>
+                    <div class="bg-gray-900 text-white rounded-lg p-4 min-w-[80px]">
+                        <div id="countdown-minutes" class="text-3xl font-bold">45</div>
+                        <div class="text-xs text-muted uppercase">Minutes</div>
+                    </div>
+                    <div class="bg-gray-900 text-white rounded-lg p-4 min-w-[80px]">
+                        <div id="countdown-seconds" class="text-3xl font-bold">30</div>
+                        <div class="text-xs text-muted uppercase">Seconds</div>
+                    </div>
+                </div>
+                <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Get Lifetime Access Today</h2>
+                <p class="text-xl text-muted">One-time payment. No subscriptions. No hidden fees.</p>
+            </div>
+
+            <div class="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-3xl p-8 md:p-12 text-white shadow-2xl">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-8">
+                    <div>
+                        <h3 class="text-2xl font-bold mb-4">Aiprodgen Pro</h3>
+                        <ul class="space-y-3">
+                            <li class="flex items-center gap-3">
+                                <svg class="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd"
+                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                        clip-rule="evenodd" />
+                                </svg>
+                                6 AI-Generated Product Image Variations
+                            </li>
+                            <li class="flex items-center gap-3">
+                                <svg class="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd"
+                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                        clip-rule="evenodd" />
+                                </svg>
+                                AI Marketing Copy Generator (7 Styles)
+                            </li>
+                            <li class="flex items-center gap-3">
+                                <svg class="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd"
+                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                        clip-rule="evenodd" />
+                                </svg>
+                                Image-to-Image Editing & Enhancement
+                            </li>
+                            <li class="flex items-center gap-3">
+                                <svg class="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd"
+                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                        clip-rule="evenodd" />
+                                </svg>
+                                Real-ESRGAN Upscaler (HD/4K/8K)
+                            </li>
+                            <li class="flex items-center gap-3">
+                                <svg class="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd"
+                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                        clip-rule="evenodd" />
+                                </svg>
+                                Export in Multiple Formats (ZIP)
+                            </li>
+                            <li class="flex items-center gap-3">
+                                <svg class="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd"
+                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                        clip-rule="evenodd" />
+                                </svg>
+                                Lifetime Updates & Support
+                            </li>
+                            <li class="flex items-center gap-3">
+                                <svg class="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd"
+                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                        clip-rule="evenodd" />
+                                </svg>
+                                Dark Mode & AI Fashion Models Included
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="text-center w-full md:w-auto">
+                        <div class="text-muted text-sm font-medium mb-1">Normal Price: <span
+                                class="line-through text-red-400"><span data-price-key="original">$297</span></span>
+                        </div>
+                        <div class="inline-block bg-red-100 text-red-600 text-xs font-bold px-2 py-1 rounded-md mb-2">
+                            84% DISCOUNT - Limited Time</div>
+                        <div class="flex items-baseline justify-center gap-1 mb-4">
+                            <span class="text-5xl md:text-6xl font-extrabold"><span
+                                    data-price-key="offer">$47</span></span>
+                            <span class="text-xl text-muted font-medium">one-time</span>
+                        </div>
+                        <button id="buyBtn"
+                            class="w-full md:w-auto bg-white text-indigo-700 px-10 py-4 rounded-xl font-bold text-lg hover:bg-gray-100 transition-colors shadow-lg">
+                            Get Lifetime Access Now
+                        </button>
+                        <p class="text-xs text-muted mt-3">4000+ Members can't be wrong.</p>
+                        <p class="text-xs text-muted mt-1">Join the community of creators</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-8 text-center">
+                <p class="text-muted text-sm mb-6">7-day money-back guarantee • Cancel Anytime • No recurring fees
+                </p>
+                <!-- Trust Badges -->
+                <div class="flex flex-wrap justify-center items-center gap-6">
+                    <div class="flex items-center gap-2 text-muted">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd"
+                                d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z"
+                                clip-rule="evenodd" />
+                        </svg>
+                        <span class="text-sm font-medium">SSL Secured</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-muted">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd"
+                                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                clip-rule="evenodd" />
+                        </svg>
+                        <span class="text-sm font-medium">Secure Payments</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-muted">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path
+                                d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                        </svg>
+                        <span class="text-sm font-medium">4,000+ Happy Users</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-muted">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd"
+                                d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z"
+                                clip-rule="evenodd" />
+                        </svg>
+                        <span class="text-sm font-medium">Money-Back Guarantee</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Competitor Comparison Section -->
+    <section class="py-16 px-4 bg-white">
+        <div class="max-w-4xl mx-auto">
+            <h2 class="text-3xl md:text-4xl font-bold text-gray-900 text-center mb-4">Why Pay Monthly When You Can Pay
+                Once?</h2>
+            <p class="text-muted text-center mb-12 max-w-2xl mx-auto">Compare our one-time pricing with monthly
+                subscription tools. Same AI technology, fraction of the cost.</p>
+
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse">
+                    <thead>
+                        <tr class="bg-gray-100">
+                            <th class="text-left py-4 px-6 font-bold text-gray-900">Tool</th>
+                            <th class="text-center py-4 px-6 font-bold text-gray-900">Monthly</th>
+                            <th class="text-center py-4 px-6 font-bold text-gray-900">Yearly</th>
+                            <th class="text-center py-4 px-6 font-bold text-gray-900">2 Years</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-gray-200">
+                            <td class="py-4 px-6 text-gray-700">Canva Pro</td>
+                            <td class="py-4 px-6 text-center text-muted"><span
+                                    data-price-key="competitor_canva_mo">$15</span>/mo</td>
+                            <td class="py-4 px-6 text-center text-muted"><span
+                                    data-price-key="competitor_canva_yr">$180</span></td>
+                            <td class="py-4 px-6 text-center text-red-500 font-medium"><span
+                                    data-price-key="competitor_canva_2yr">$360</span></td>
+                        </tr>
+                        <tr class="border-b border-gray-200">
+                            <td class="py-4 px-6 text-gray-700">Photoroom Pro</td>
+                            <td class="py-4 px-6 text-center text-muted"><span
+                                    data-price-key="competitor_photo_mo">$13</span>/mo</td>
+                            <td class="py-4 px-6 text-center text-muted"><span
+                                    data-price-key="competitor_photo_yr">$156</span></td>
+                            <td class="py-4 px-6 text-center text-red-500 font-medium"><span
+                                    data-price-key="competitor_photo_2yr">$312</span></td>
+                        </tr>
+                        <tr class="border-b border-gray-200">
+                            <td class="py-4 px-6 text-gray-700">Pebblely</td>
+                            <td class="py-4 px-6 text-center text-muted"><span
+                                    data-price-key="competitor_pebble_mo">$19</span>/mo</td>
+                            <td class="py-4 px-6 text-center text-muted"><span
+                                    data-price-key="competitor_pebble_yr">$228</span></td>
+                            <td class="py-4 px-6 text-center text-red-500 font-medium"><span
+                                    data-price-key="competitor_pebble_2yr">$456</span></td>
+                        </tr>
+                        <tr class="border-b border-gray-200">
+                            <td class="py-4 px-6 text-gray-700">Flair AI</td>
+                            <td class="py-4 px-6 text-center text-muted"><span
+                                    data-price-key="competitor_flair_mo">$25</span>/mo</td>
+                            <td class="py-4 px-6 text-center text-muted"><span
+                                    data-price-key="competitor_flair_yr">$300</span></td>
+                            <td class="py-4 px-6 text-center text-red-500 font-medium"><span
+                                    data-price-key="competitor_flair_2yr">$600</span></td>
+                        </tr>
+                        <tr class="bg-gradient-to-r from-indigo-50 to-purple-50">
+                            <td class="py-4 px-6 font-bold text-indigo-700">✨ Aiprodgen</td>
+                            <td colspan="3" class="py-4 px-6 text-center">
+                                <span class="text-3xl font-extrabold text-green-600"><span
+                                        data-price-key="offer">$47</span></span>
+                                <span class="text-green-700 font-medium ml-2">one-time | Lifetime access</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-8 text-center">
+                <p class="text-muted text-sm">* You use your own Google AI API key - only pay Google for what you use
+                    (free tier available)</p>
+                <button onclick="scrollToPricing()" class="mt-4 gradient-bg text-white px-8 py-3 rounded-xl font-bold">
+                    Get Lifetime Access Now →
+                </button>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- FAQ Section -->
+    <section class="py-20 px-4 bg-gray-50">
+        <div class="max-w-3xl mx-auto">
+            <h2 class="text-3xl md:text-4xl font-bold text-gray-900 text-center mb-12">Frequently Asked Questions</h2>
+            <div class="space-y-6">
+                <div class="bg-white rounded-xl p-6 border border-gray-200">
+                    <h3 class="font-bold text-lg text-gray-900 mb-2">Do I need my own API key?</h3>
+                    <p class="text-muted">Yes, you'll use your own Google AI (Gemini) API key. This means you only
+                        pay Google directly for usage - we don't charge per image. A free tier is available for testing.
+                    </p>
+                </div>
+                <div class="bg-white rounded-xl p-6 border border-gray-200">
+                    <h3 class="font-bold text-lg text-gray-900 mb-2">Is this a subscription?</h3>
+                    <p class="text-muted">No! This is a one-time payment of <span data-price-key="offer">$47</span>
+                        for lifetime access. No monthly fees,
+                        no annual renewals, no surprises.</p>
+                </div>
+                <div class="bg-white rounded-xl p-6 border border-gray-200">
+                    <h3 class="font-bold text-lg text-gray-900 mb-2">Can I use the images commercially?</h3>
+                    <p class="text-muted">Absolutely. All images generated are yours to use for your products,
+                        stores, ads, and marketing materials.</p>
+                </div>
+                <div class="bg-white rounded-xl p-6 border border-gray-200">
+                    <h3 class="font-bold text-lg text-gray-900 mb-2">How do I get my login credentials?</h3>
+                    <p class="text-muted">After successful payment, you'll receive your login credentials (email +
+                        password) instantly. You can change your password anytime from your dashboard.</p>
+                </div>
+                <div class="bg-white rounded-xl p-6 border border-gray-200">
+                    <h3 class="font-bold text-lg text-gray-900 mb-2">What if I'm not satisfied?</h3>
+                    <p class="text-muted">We offer a 7-day money-back guarantee. Email us within 7 days for a full
+                        refund—no questions asked.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="py-20 px-4 gradient-bg text-white">
+        <div class="max-w-4xl mx-auto text-center">
+            <h2 class="text-3xl md:text-4xl font-bold mb-6">Ready to Transform Your Product Content?</h2>
+            <p class="text-xl text-white/80 mb-8">Join hundreds of e-commerce sellers, marketers, and entrepreneurs
+                using AI to create stunning product visuals.</p>
+            <button onclick="scrollToPricing()"
+                class="btn btn-primary">
+                Get Lifetime Access - Just <span data-price-key="offer">$47</span>
+            </button>
+            <p class="mt-6 text-white/60 text-sm">Limited time founder's pricing. Price increases after this offer ends.
+            </p>
+        </div>
+    </section>
+
+    <!-- Guarantee Section -->
+    <section class="py-12 px-4 bg-green-50 border-y border-green-200">
+        <div class="max-w-3xl mx-auto text-center">
+            <div class="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
+                <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+            </div>
+            <h3 class="text-2xl font-bold text-gray-900 mb-2">100% Risk-Free Guarantee</h3>
+            <p class="text-muted max-w-xl mx-auto">Try Aiprodgen for 7 days with full access. If it's not right for
+                you, get a complete refund. No questions asked. No strings attached.</p>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-gray-900 text-muted py-12 px-4">
+        <div class="max-w-7xl mx-auto text-center">
+            <div class="flex items-center justify-center gap-2 mb-6">
+                <img src="/logo.png" alt="aiprodgen logo" class="w-10 h-10 rounded-xl">
+                <span class="font-bold text-xl flex items-center">
+                    <span
+                        class="bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 animate-gradient">Ai</span><span
+                        class="text-white">prodgen</span>
+                </span>
+            </div>
+            <p class="mb-4">© 2026 aiprodgen. All rights reserved.</p>
+            <div class="flex flex-wrap justify-center gap-6 text-sm">
+                <a href="/privacy.html" class="hover:text-white">Privacy Policy</a>
+                <a href="/terms.html" class="hover:text-white">Terms of Service</a>
+                <a href="/refund-policy.html" class="hover:text-white">Refund Policy</a>
+                <a href="/shipping-policy.html" class="hover:text-white">Shipping Policy</a>
+                <a href="/contact.html" class="hover:text-white">Contact</a>
+            </div>
+        </div>
+    </footer>
+
+
+
+    <!-- Sticky Mobile CTA -->
+    <!-- Sticky Countdown Bar -->
+    <!-- Sticky Countdown Bar -->
+    <div id="stickyCta"
+        class="sticky-cta bg-amber-400 border-t-4 border-amber-500 shadow-[0_-4px_20px_rgba(0,0,0,0.1)] py-2 px-2 md:py-3 md:px-4 z-50">
+        <div
+            class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-center gap-2 md:gap-8 text-center md:text-left">
+
+            <div class="flex items-center gap-2 md:gap-4">
+                <span
+                    class="text-amber-900 font-extrabold text-xs md:text-xl uppercase tracking-tight leading-tight max-w-[80px] md:max-w-none text-right md:text-left">Prices
+                    Increase In:</span>
+                <div class="flex items-center gap-1 md:gap-2 font-mono text-lg md:text-3xl font-bold text-amber-950">
+                    <div class="bg-amber-300/50 rounded px-1.5 py-0.5 md:px-2 md:py-1 min-w-[2ch]"
+                        id="sticky-countdown-days">00</div>
+                    <span
+                        class="text-[10px] md:text-sm font-sans font-bold text-amber-700 opacity-75 self-center mx-[-2px] md:mx-[-4px]">Days</span>
+                    <span class="text-amber-700">:</span>
+                    <div class="bg-amber-300/50 rounded px-1.5 py-0.5 md:px-2 md:py-1 min-w-[2ch]"
+                        id="sticky-countdown-hours">00</div>
+                    <span
+                        class="text-[10px] md:text-sm font-sans font-bold text-amber-700 opacity-75 self-center mx-[-2px] md:mx-[-4px]">Hrs</span>
+                    <span class="text-amber-700">:</span>
+                    <div class="bg-amber-300/50 rounded px-1.5 py-0.5 md:px-2 md:py-1 min-w-[2ch]"
+                        id="sticky-countdown-minutes">00</div>
+                    <span
+                        class="text-[10px] md:text-sm font-sans font-bold text-amber-700 opacity-75 self-center mx-[-2px] md:mx-[-4px]">Mins</span>
+                    <span class="text-amber-700">:</span>
+                    <div class="bg-amber-300/50 rounded px-1.5 py-0.5 md:px-2 md:py-1 min-w-[2ch]"
+                        id="sticky-countdown-seconds">00</div>
+                    <span
+                        class="text-[10px] md:text-sm font-sans font-bold text-amber-700 opacity-75 self-center mx-[-2px] md:mx-[-4px]">Secs</span>
+                </div>
+            </div>
+
+            <button onclick="scrollToPricing()"
+                class="bg-rose-600 text-white px-6 py-2 md:px-8 md:py-3 rounded-full font-black text-sm md:text-lg shadow-lg hover:bg-rose-700 hover:scale-105 transition-all uppercase tracking-wide border-b-2 md:border-b-4 border-rose-800 active:border-b-0 active:translate-y-1 whitespace-nowrap">
+                Get Lifetime Access
+            </button>
+        </div>
+    </div>
+
+    <!-- Live Purchase Toast -->
+    <div id="purchaseToast"
+        class="fixed bottom-20 left-4 bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-30 transform translate-y-full opacity-0 transition-all duration-500 max-w-xs">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                <svg class="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                        clip-rule="evenodd" />
+                </svg>
+            </div>
+            <div>
+                <p class="font-medium text-gray-900 text-sm" id="toastName">Someone</p>
+                <p class="text-xs text-muted">just purchased aiprodgen</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Payment Modal -->
+    <div id="paymentModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-2xl p-8 max-w-md w-full mx-4 relative">
+            <button onclick="closeModal()" class="absolute top-4 right-4 text-muted hover:text-muted">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+            <h3 class="text-2xl font-bold text-gray-900 mb-2">Complete Your Purchase</h3>
+            <p class="text-muted mb-6">Enter your email to receive login credentials after payment.</p>
+            <form id="paymentForm" onsubmit="initiatePayment(event)">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+                    <input type="email" id="customerEmail" required
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        placeholder="your@email.com">
+                </div>
+                <button type="submit" class="w-full gradient-bg text-white py-4 rounded-lg font-bold text-lg">
+                    Pay $47 - Get Lifetime Access
+                </button>
+            </form>
+            <p class="text-center text-sm text-muted mt-4">🔒 Powered by Razorpay</p>
+        </div>
+    </div>
+
+    <script>
+        let currentCurrency = 'USD';
+        const EXCHANGE_RATES = {
+            USD: { symbol: '$', rate: 1, flag: '🇺🇸' },
+            INR: { symbol: '₹', rate: 84, flag: '🇮🇳' } // Approx rate
+        };
+
+        // Price mapping for fixed values (better than auto-calc for psychological pricing)
+        const PRICES = {
+            offer: { USD: 47, INR: 3999 },
+            original: { USD: 297, INR: 24999 },
+            savings_mo: { USD: 4800, INR: 400000 },
+            competitor_canva_mo: { USD: 15, INR: 1299 },
+            competitor_canva_yr: { USD: 180, INR: 15500 },
+            competitor_canva_2yr: { USD: 360, INR: 31000 },
+            competitor_photo_mo: { USD: 13, INR: 999 },
+            competitor_photo_yr: { USD: 156, INR: 11999 },
+            competitor_photo_2yr: { USD: 312, INR: 23999 },
+            competitor_pebble_mo: { USD: 19, INR: 1599 },
+            competitor_pebble_yr: { USD: 228, INR: 19000 },
+            competitor_pebble_2yr: { USD: 456, INR: 38000 },
+            competitor_flair_mo: { USD: 25, INR: 2099 },
+            competitor_flair_yr: { USD: 300, INR: 24999 },
+            competitor_flair_2yr: { USD: 600, INR: 49999 },
+            competitor_photo_shoot: { USD: 500, INR: 40000 },
+            competitor_copy: { USD: 100, INR: 8000 }
+        };
+
+        function toggleCurrency() {
+            currentCurrency = currentCurrency === 'USD' ? 'INR' : 'USD';
+            updateCurrencyUI();
+            localStorage.setItem('preferredCurrency', currentCurrency);
+        }
+
+        function updateCurrencyUI() {
+            const currency = currentCurrency;
+            const config = EXCHANGE_RATES[currency];
+
+            // Update Toggle
+            document.getElementById('currencyFlag').textContent = config.flag;
+            document.getElementById('currencyCode').textContent = currency;
+
+            // Update all dynamic prices
+            document.querySelectorAll('[data-price-key]').forEach(el => {
+                const key = el.dataset.priceKey;
+                if (PRICES[key]) {
+                    el.textContent = formatPrice(PRICES[key][currency], currency);
+                }
+            });
+
+            // Update page title
+            document.title = `Aiprodgen - Lifetime Access ${formatPrice(PRICES.offer[currency], currency)}`;
+        }
+
+        function formatPrice(amount, currency) {
+            const symbol = EXCHANGE_RATES[currency].symbol;
+            return currency === 'INR'
+                ? `${symbol}${amount.toLocaleString('en-IN')}`
+                : `${symbol}${amount}`;
+        }
+
+        // Initialize currency
+        const savedCurrency = localStorage.getItem('preferredCurrency');
+        if (savedCurrency) {
+            currentCurrency = savedCurrency;
+        } else {
+            // Simple timezone check for crude geo-detection
+            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            if (tz.includes('Calcutta') || tz.includes('Kolkata') || tz.includes('India')) {
+                currentCurrency = 'INR';
+            }
+        }
+
+        // Initialize UI on load
+        document.addEventListener('DOMContentLoaded', updateCurrencyUI);
+
+        function scrollToPricing() {
+            const buyBtn = document.getElementById('buyBtn');
+            const offset = 200; // Position button in upper third of screen
+            const elementPosition = buyBtn.getBoundingClientRect().top + window.pageYOffset;
+            window.scrollTo({ top: elementPosition - offset, behavior: 'smooth' });
+        }
+
+        document.getElementById('buyBtn').addEventListener('click', () => {
+            // Update pay button text in modal
+            const price = PRICES.offer[currentCurrency];
+            document.querySelector('#paymentForm button').textContent = `Pay ${formatPrice(price, currentCurrency)} - Get Lifetime Access`;
+            document.getElementById('paymentModal').classList.remove('hidden');
+        });
+
+        function closeModal() {
+            document.getElementById('paymentModal').classList.add('hidden');
+        }
+
+        async function initiatePayment(e) {
+            e.preventDefault();
+            const email = document.getElementById('customerEmail').value;
+
+            if (!email) {
+                alert('Please enter your email');
+                return;
+            }
+
+            try {
+                // Determine price based on current currency
+                const price = PRICES.offer[currentCurrency];
+
+                // Create order on server
+                const response = await fetch('/api/payment/create-order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email,
+                        amount: price,
+                        currency: currentCurrency
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+
+                // Open Razorpay checkout
+                const options = {
+                    key: data.razorpayKeyId,
+                    amount: data.amount,
+                    currency: data.currency || 'USD',
+                    name: 'aiprodgen',
+                    description: 'Lifetime Access - One Time Payment',
+                    order_id: data.orderId,
+                    handler: async function (response) {
+                        // Verify payment on server
+                        const verifyResponse = await fetch('/api/payment/verify', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                razorpay_order_id: response.razorpay_order_id,
+                                razorpay_payment_id: response.razorpay_payment_id,
+                                razorpay_signature: response.razorpay_signature
+                            })
+                        });
+
+                        const verifyData = await verifyResponse.json();
+
+                        if (verifyData.success) {
+                            // Meta Pixel: Purchase event
+                            if (typeof fbq !== 'undefined') {
+                                fbq('track', 'Purchase', {
+                                    value: price,
+                                    currency: currentCurrency,
+                                    content_name: 'Lifetime Access',
+                                    content_type: 'product'
+                                });
+                            }
+
+                            // Show credentials and redirect
+                            alert(`Payment successful!\n\nYour login credentials:\nEmail: ${verifyData.email}\nPassword: ${verifyData.password}\n\nPlease save these credentials. You will be redirected to login.`);
+                            window.location.href = '/login.html';
+                        } else {
+                            alert('Payment verification failed. Please contact support.');
+                        }
+                    },
+                    prefill: {
+                        email: email
+                    },
+                    theme: {
+                        color: '#667eea'
+                    }
+                };
+
+                const razorpay = new Razorpay(options);
+                razorpay.open();
+
+                // Meta Pixel: InitiateCheckout
+                if (typeof fbq !== 'undefined') {
+                    fbq('track', 'InitiateCheckout', {
+                        value: price,
+                        currency: currentCurrency
+                    });
+                }
+
+                closeModal();
+
+            } catch (error) {
+                console.error('Payment error:', error);
+                alert('Something went wrong. Please try again.');
+            }
+        }
+
+        // Countdown Timer Logic
+        function startCountdown() {
+            // Set countdown to 3 days from now (stored in localStorage to persist)
+            let endTime = localStorage.getItem('offerEndTime');
+            if (!endTime || new Date(endTime) < new Date()) {
+                const now = new Date();
+                now.setDate(now.getDate() + 3);
+                endTime = now.toISOString();
+                localStorage.setItem('offerEndTime', endTime);
+            }
+
+            function updateCountdown() {
+                const now = new Date();
+                const end = new Date(endTime);
+                const diff = end - now;
+
+                if (diff <= 0) {
+                    // Reset countdown
+                    localStorage.removeItem('offerEndTime');
+                    startCountdown();
+                    return;
+                }
+
+                const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+                // Update Main Timer
+                const elDays = document.getElementById('countdown-days');
+                const elHours = document.getElementById('countdown-hours');
+                const elMins = document.getElementById('countdown-minutes');
+                const elSecs = document.getElementById('countdown-seconds');
+
+                if (elDays) elDays.textContent = String(days).padStart(2, '0');
+                if (elHours) elHours.textContent = String(hours).padStart(2, '0');
+                if (elMins) elMins.textContent = String(minutes).padStart(2, '0');
+                if (elSecs) elSecs.textContent = String(seconds).padStart(2, '0');
+
+                // Update Sticky Timer
+                const stickyDays = document.getElementById('sticky-countdown-days');
+                const stickyHours = document.getElementById('sticky-countdown-hours');
+                const stickyMins = document.getElementById('sticky-countdown-minutes');
+                const stickySecs = document.getElementById('sticky-countdown-seconds');
+
+                if (stickyDays) stickyDays.textContent = String(days).padStart(2, '0');
+                if (stickyHours) stickyHours.textContent = String(hours).padStart(2, '0');
+                if (stickyMins) stickyMins.textContent = String(minutes).padStart(2, '0');
+                if (stickySecs) stickySecs.textContent = String(seconds).padStart(2, '0');
+            }
+
+            updateCountdown();
+            setInterval(updateCountdown, 1000);
+        }
+
+        // Start countdown on page load
+        startCountdown();
+
+        // Sticky Mobile CTA - show after scrolling past hero
+        const stickyCta = document.getElementById('stickyCta');
+        window.addEventListener('scroll', () => {
+            // Show after 300px scroll on all devices
+            if (window.scrollY > 300) {
+                stickyCta.classList.add('visible');
+            } else {
+                stickyCta.classList.remove('visible');
+            }
+        });
+
+        // Live Purchase Notifications
+        const names = ['Sarah', 'Mike', 'Jennifer', 'Raj', 'Priya', 'John', 'Lisa', 'David', 'Emma', 'Amit'];
+        const locations = ['Mumbai', 'Bangalore', 'Delhi', 'New York', 'London', 'Singapore', 'Dubai', 'Toronto'];
+
+        function showPurchaseToast() {
+            const toast = document.getElementById('purchaseToast');
+            const nameEl = document.getElementById('toastName');
+            const randomName = names[Math.floor(Math.random() * names.length)];
+            const randomLocation = locations[Math.floor(Math.random() * locations.length)];
+
+            nameEl.textContent = `${randomName} from ${randomLocation}`;
+
+            // Slide in
+            toast.style.transform = 'translateY(0)';
+            toast.style.opacity = '1';
+
+            // Hide after 4 seconds
+            setTimeout(() => {
+                toast.style.transform = 'translateY(100%)';
+                toast.style.opacity = '0';
+            }, 4000);
+        }
+
+        // Show first toast after 8 seconds, then every 30-60 seconds
+        setTimeout(() => {
+            showPurchaseToast();
+            setInterval(() => {
+                showPurchaseToast();
+            }, 30000 + Math.random() * 30000);
+        }, 8000);
+
+        // Exit Intent Popup
+        let exitShown = sessionStorage.getItem('exitShown') === 'true';
+
+        function showExitPopup() {
+            if (exitShown) return;
+            exitShown = true;
+            sessionStorage.setItem('exitShown', 'true');
+
+            const overlay = document.getElementById('exitPopupOverlay');
+            if (!overlay) return;
+
+            overlay.classList.remove('hidden');
+
+            // Small delay to allow display:flex to apply before opacity transition
+            setTimeout(() => {
+                const backdrop = document.getElementById('exitBackdrop');
+                const modal = document.getElementById('exitModal');
+
+                if (backdrop) backdrop.classList.remove('opacity-0');
+                if (modal) {
+                    modal.classList.remove('opacity-0', 'scale-95', 'translate-y-4');
+                    modal.classList.add('opacity-100', 'scale-100', 'translate-y-0');
+                }
+            }, 10);
+        }
+
+        function closeExitPopup() {
+            const backdrop = document.getElementById('exitBackdrop');
+            const modal = document.getElementById('exitModal');
+
+            if (backdrop) backdrop.classList.add('opacity-0');
+            if (modal) {
+                modal.classList.remove('opacity-100', 'scale-100', 'translate-y-0');
+                modal.classList.add('opacity-0', 'scale-95', 'translate-y-4');
+            }
+
+            setTimeout(() => {
+                const overlay = document.getElementById('exitPopupOverlay');
+                if (overlay) overlay.classList.add('hidden');
+            }, 300);
+        }
+
+        // Detect mouse leaving viewport (desktop)
+        document.addEventListener('mouseout', (e) => {
+            if (e.clientY < 10 && !exitShown) {
+                showExitPopup();
+            }
+        });
+
+        // Attach popup close listeners after DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            // Close on backdrop click
+            const backdrop = document.getElementById('exitBackdrop');
+            if (backdrop) backdrop.addEventListener('click', closeExitPopup);
+
+            // Attach listeners to buttons
+            const ctaBtn = document.getElementById('exitPopupCta');
+            if (ctaBtn) ctaBtn.addEventListener('click', closeExitPopup);
+
+            const closeBtn = document.getElementById('exitPopupCloseBtn');
+            if (closeBtn) closeBtn.addEventListener('click', closeExitPopup);
+
+            const xBtn = document.getElementById('exitPopupX');
+            if (xBtn) xBtn.addEventListener('click', closeExitPopup);
+        });
+
+        // Escape key to close
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeExitPopup();
+        });
+    </script>
+
+    <!-- Exit Intent Popup Modal -->
+    <!-- Exit Intent Popup (Centralized Overlay) -->
+    <div id="exitPopupOverlay" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-4">
+        <!-- Backdrop -->
+        <div id="exitBackdrop"
+            class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 opacity-0"></div>
+
+        <!-- Modal -->
+        <div id="exitModal"
+            class="relative bg-white w-full max-w-md rounded-2xl shadow-2xl p-0 overflow-hidden transform transition-all duration-300 opacity-0 scale-95 translate-y-4">
+
+            <!-- Close Button -->
+            <button id="exitPopupX"
+                class="absolute top-4 right-4 text-white/80 hover:text-white transition-colors cursor-pointer z-50 p-2 bg-black/20 hover:bg-black/30 rounded-full">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                    </path>
+                </svg>
+            </button>
+
+            <!-- Header -->
+            <div class="gradient-bg p-8 text-white text-center">
+                <div class="text-4xl mb-3 animate-bounce">🎁</div>
+                <h3 class="text-2xl font-bold">Wait! Don't Leave Yet</h3>
+            </div>
+
+            <!-- Content -->
+            <div class="p-6 text-center space-y-4">
+                <p class="text-slate-600">You're about to miss out on <strong>97% OFF</strong> our AI Product Generator!
+                </p>
+
+                <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                    <p class="text-amber-800 font-bold text-lg">Special Exit Offer</p>
+                    <p class="text-amber-600 font-medium">Get lifetime access for just <span
+                            class="text-2xl font-bold text-green-600"><span data-price-key="offer">$47</span></span>
+                        <span class="text-amber-400 line-through text-sm">(<span
+                                data-price-key="original">$297</span>)</span>
+                    </p>
+                </div>
+
+                <div class="space-y-3 pt-2">
+                    <button onclick="document.querySelector('.cta-btn').click(); closeExitPopup()" id="exitPopupCta"
+                        class="block w-full gradient-bg text-white font-bold py-3.5 px-6 rounded-xl shadow-lg hover:shadow-indigo-500/30 hover:-translate-y-0.5 transition-all">
+                        🔥 Claim My 97% Discount
+                    </button>
+
+                    <button id="exitPopupCloseBtn"
+                        class="text-slate-400 hover:text-slate-600 text-sm font-medium transition-colors cursor-pointer">
+                        No thanks, I'll pay full price later
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
