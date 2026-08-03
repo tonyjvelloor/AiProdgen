@@ -259,7 +259,7 @@ app.post('/api/generate-image', auth.requireAuth, apiLimiter, async (req, res) =
         const userId = req.user.userId;
 
         // Plan-based API key resolution
-        const userPlan = db.getUserPlan(userId);
+        const userPlan = await db.getUserPlan(userId);
         const planConfig = getPlanConfig(userPlan.plan);
         let apiKey;
 
@@ -279,7 +279,7 @@ app.post('/api/generate-image', auth.requireAuth, apiLimiter, async (req, res) =
         } else if (userPlan.plan === 'lifetime_founder') {
             // Founder plan uses credits
             apiKey = DEFAULT_API_KEY;
-            const creditInfo = db.getUserCreditInfo(userId);
+            const creditInfo = await db.getUserCreditInfo(userId);
             if ((creditInfo?.credits || 0) < 1) {
                 return res.status(429).json({ error: 'Insufficient credits. Please top up your credit balance.' });
             }
@@ -358,14 +358,14 @@ app.post('/api/generate-image', auth.requireAuth, apiLimiter, async (req, res) =
 
         // Log successful generation and track usage
         if (userId && userId > 0) {
-            db.logGeneration(userId, prompt, 1);
+            await db.logGeneration(userId, prompt, 1);
             // Increment monthly gen count for paid plans
             if (planConfig.type === 'server' && userPlan.plan !== 'lifetime_founder') {
-                db.incrementGenCount(userId);
+                await db.incrementGenCount(userId);
             }
             // Deduct credit for founder plan
             if (userPlan.plan === 'lifetime_founder') {
-                db.useCredits(userId, 1);
+                await db.useCredits(userId, 1);
             }
         }
 
@@ -412,7 +412,7 @@ app.post('/api/upscale-esrgan', auth.requireAuth, apiLimiter, async (req, res) =
         const replicateApiKey = process.env.REPLICATE_API_TOKEN;
 
         // Plan gating: Creator+ only
-        const userPlan = db.getUserPlan(req.user.userId);
+        const userPlan = await db.getUserPlan(req.user.userId);
         const planConfig = getPlanConfig(userPlan.plan);
         if (planConfig.upscale <= 0) {
             return res.status(403).json({ error: 'HD Upscaling requires Creator plan or higher. Upgrade to unlock!' });
@@ -533,14 +533,14 @@ function getPlanConfig(planName) {
 }
 
 // Get credit balance
-app.get('/api/credits/balance', auth.requireAuth, (req, res) => {
+app.get('/api/credits/balance', auth.requireAuth, async (req, res) => {
     try {
-        const user = db.getUserByEmail(req.user.email);
+        const user = await db.getUserByEmail(req.user.email);
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        const creditInfo = db.getUserCreditInfo(user.id);
+        const creditInfo = await db.getUserCreditInfo(user.id);
         res.json({
             credits: creditInfo.credits || 0,
             total_purchased: creditInfo.total_purchased || 0,
@@ -553,7 +553,7 @@ app.get('/api/credits/balance', auth.requireAuth, (req, res) => {
 });
 
 // Get available packages
-app.get('/api/credits/packages', (req, res) => {
+app.get('/api/credits/packages', async (req, res) => {
     res.json(CREDIT_PACKAGES);
 });
 
@@ -637,7 +637,7 @@ app.post('/api/credits/verify', auth.requireAuth, async (req, res) => {
         }
 
         // Get user
-        const user = db.getUserByEmail(req.user.email);
+        const user = await db.getUserByEmail(req.user.email);
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -647,10 +647,10 @@ app.post('/api/credits/verify', auth.requireAuth, async (req, res) => {
         const amount = (useCurrency === 'USD') ? pkg.amount_usd : pkg.amount_inr;
 
         // Add credits and record purchase
-        db.addCredits(user.id, pkg.credits);
-        db.recordCreditPurchase(user.id, pkg.credits, amount, razorpay_payment_id, razorpay_order_id);
+        await db.addCredits(user.id, pkg.credits);
+        await db.recordCreditPurchase(user.id, pkg.credits, amount, razorpay_payment_id, razorpay_order_id);
 
-        const newBalance = db.getUserCredits(user.id);
+        const newBalance = await db.getUserCredits(user.id);
         console.log(`✅ Credits added: ${pkg.credits} for user ${user.email}. New balance: ${newBalance}`);
 
         // Track Purchase
@@ -681,9 +681,9 @@ app.post('/api/credits/verify', auth.requireAuth, async (req, res) => {
 // ============ Plan Subscription API ============
 
 // Get user plan info
-app.get('/api/plan/info', auth.requireAuth, (req, res) => {
+app.get('/api/plan/info', auth.requireAuth, async (req, res) => {
     try {
-        const userPlan = db.getUserPlan(req.user.userId);
+        const userPlan = await db.getUserPlan(req.user.userId);
         const planConfig = getPlanConfig(userPlan.plan);
         res.json({
             plan: userPlan.plan || 'free',
@@ -700,7 +700,7 @@ app.get('/api/plan/info', auth.requireAuth, (req, res) => {
 });
 
 // Get available plans
-app.get('/api/plan/pricing', (req, res) => {
+app.get('/api/plan/pricing', async (req, res) => {
     res.json({ plans: PLANS, prices: PLAN_PRICES });
 });
 
@@ -777,17 +777,17 @@ app.post('/api/plan/verify', auth.requireAuth, async (req, res) => {
         }
 
         // Activate plan
-        const user = db.getUserByEmail(req.user.email);
+        const user = await db.getUserByEmail(req.user.email);
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        db.setUserPlan(user.id, planId, billingCycle);
+        await db.setUserPlan(user.id, planId, billingCycle);
 
         // Also initialize upscale credits based on plan
         const planConfig = getPlanConfig(planId);
-        db.initUserCredits(user.id);
-        db.addCredits(user.id, planConfig.upscale);
+        await db.initUserCredits(user.id);
+        await db.addCredits(user.id, planConfig.upscale);
 
         console.log(`✅ Plan activated: ${planId} (${billingCycle}) for ${user.email}`);
 
@@ -824,12 +824,12 @@ app.post('/api/upscale-esrgan-paid', apiLimiter, auth.requireAuth, async (req, r
         }
 
         // Get user and check credits
-        const user = db.getUserByEmail(req.user.email);
+        const user = await db.getUserByEmail(req.user.email);
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        const currentCredits = db.getUserCredits(user.id);
+        const currentCredits = await db.getUserCredits(user.id);
         if (currentCredits < 1) {
             return res.status(402).json({
                 error: 'Insufficient credits',
@@ -839,7 +839,7 @@ app.post('/api/upscale-esrgan-paid', apiLimiter, auth.requireAuth, async (req, r
         }
 
         // Deduct credit BEFORE processing (atomic)
-        const deducted = db.useCredits(user.id, 1);
+        const deducted = await db.useCredits(user.id, 1);
         if (!deducted) {
             return res.status(402).json({
                 error: 'Insufficient credits',
@@ -874,7 +874,7 @@ app.post('/api/upscale-esrgan-paid', apiLimiter, auth.requireAuth, async (req, r
 
         if (!response.ok) {
             // Refund credit on API error
-            db.addCredits(user.id, 1);
+            await db.addCredits(user.id, 1);
             const errorData = await response.json();
             throw new Error(errorData.detail || 'Replicate API error');
         }
@@ -895,25 +895,25 @@ app.post('/api/upscale-esrgan-paid', apiLimiter, auth.requireAuth, async (req, r
 
         if (result.status === 'failed') {
             // Refund credit on failure
-            db.addCredits(user.id, 1);
+            await db.addCredits(user.id, 1);
             throw new Error(result.error || 'Upscaling failed');
         }
 
         if (!result.output) {
             // Refund credit if no output
-            db.addCredits(user.id, 1);
+            await db.addCredits(user.id, 1);
             throw new Error('No output received from upscaler');
         }
 
         // Log usage
-        db.logUpscaleUsage(user.id, 1, upscaleScale, enableFaceEnhance);
+        await db.logUpscaleUsage(user.id, 1, upscaleScale, enableFaceEnhance);
 
         // Fetch the upscaled image and convert to base64
         const imageResponse = await fetch(result.output);
         const imageBuffer = await imageResponse.arrayBuffer();
         const upscaledBase64 = Buffer.from(imageBuffer).toString('base64');
 
-        const remainingCredits = db.getUserCredits(user.id);
+        const remainingCredits = await db.getUserCredits(user.id);
         console.log(`✅ Paid upscale complete (${upscaleScale}x). Credits remaining: ${remainingCredits}`);
 
         res.json({
@@ -930,7 +930,7 @@ app.post('/api/upscale-esrgan-paid', apiLimiter, auth.requireAuth, async (req, r
 });
 
 // 4. Get rate limit status
-app.get('/api/rate-limit-status', auth.requireAuth, (req, res) => {
+app.get('/api/rate-limit-status', auth.requireAuth, async (req, res) => {
     const apiKey = req.headers['x-api-key'] || DEFAULT_API_KEY;
     const state = requestQueue.get(apiKey);
 
@@ -947,18 +947,18 @@ app.get('/api/rate-limit-status', auth.requireAuth, (req, res) => {
 });
 
 // 6. User Stats & History
-app.get('/api/user/history', auth.requireAuth, (req, res) => {
+app.get('/api/user/history', auth.requireAuth, async (req, res) => {
     try {
-        const history = db.getGenerationHistory(req.user.userId);
+        const history = await db.getGenerationHistory(req.user.userId);
         res.json(history);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-app.get('/api/user/stats', auth.requireAuth, (req, res) => {
+app.get('/api/user/stats', auth.requireAuth, async (req, res) => {
     try {
-        const stats = db.getUserStats(req.user.userId);
+        const stats = await db.getUserStats(req.user.userId);
         res.json(stats);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -1011,7 +1011,7 @@ app.post('/api/upscale-image', apiLimiter, async (req, res) => {
 // ============ Admin Routes ============
 
 // Admin Middleware
-const requireAdmin = (req, res, next) => {
+const requireAdmin = async (req, res, next) => {
     const adminToken = req.headers['x-admin-token'];
     // Simple hardcoded token for this phase. In production, use JWT with role='admin'
     if (adminToken === 'your-admin-secret-token-123') {
@@ -1021,7 +1021,7 @@ const requireAdmin = (req, res, next) => {
     }
 };
 
-app.post('/api/admin/login', (req, res) => {
+app.post('/api/admin/login', async (req, res) => {
     const { username, password } = req.body;
     // Hardcoded credentials as per plan
     if (username === 'admin' && password === 'admin123') {
@@ -1031,9 +1031,9 @@ app.post('/api/admin/login', (req, res) => {
     }
 });
 
-app.get('/api/admin/stats', requireAdmin, (req, res) => {
+app.get('/api/admin/stats', requireAdmin, async (req, res) => {
     try {
-        const stats = db.getAdminStats();
+        const stats = await db.getAdminStats();
         res.json(stats);
     } catch (e) {
         console.error("Admin Stats Error:", e);
@@ -1066,7 +1066,7 @@ app.put('/api/admin/users/:id', requireAdmin, async (req, res) => {
             return res.status(400).json({ error: "No fields to update" });
         }
 
-        const success = db.updateUser(id, updates);
+        const success = await db.updateUser(id, updates);
         if (success) {
             res.json({ success: true, message: `User ${id} updated` });
         } else {
@@ -1079,10 +1079,10 @@ app.put('/api/admin/users/:id', requireAdmin, async (req, res) => {
 });
 
 // Delete User
-app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
+app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
-        const success = db.deleteUser(id);
+        const success = await db.deleteUser(id);
 
         if (success) {
             res.json({ success: true, message: `User ${id} deleted` });
@@ -1096,9 +1096,9 @@ app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
 });
 
 // Get All Users
-app.get('/api/admin/users', requireAdmin, (req, res) => {
+app.get('/api/admin/users', requireAdmin, async (req, res) => {
     try {
-        const users = db.getAllUsers();
+        const users = await db.getAllUsers();
         res.json(users);
     } catch (e) {
         console.error("Admin Users Error:", e);
@@ -1116,7 +1116,7 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
         }
 
         // Check if email already exists
-        if (db.emailExists(email)) {
+        if (await db.emailExists(email)) {
             return res.status(400).json({ error: "Email already registered" });
         }
 
@@ -1127,14 +1127,14 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
         const paymentId = 'admin_' + Date.now();
         const orderId = 'admin_order_' + Date.now();
 
-        db.createUser(email, passwordHash, paymentId, orderId);
+        await db.createUser(email, passwordHash, paymentId, orderId);
 
         // Get the created user
-        const user = db.getUserByEmail(email);
+        const user = await db.getUserByEmail(email);
 
         // Set active status if specified
         if (user && !is_active) {
-            db.updateUser(user.id, { is_active: false });
+            await db.updateUser(user.id, { is_active: false });
         }
 
         res.json({
@@ -1153,11 +1153,11 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
 app.post('/api/test/seed', async (req, res) => {
     try {
         const testEmail = 'test@example.com';
-        if (!db.emailExists(testEmail)) {
+        if (!await db.emailExists(testEmail)) {
             // Password: password123
             const hash = await auth.hashPassword('password123');
             // Mock payment/order IDs
-            db.createUser(testEmail, hash, 'pay_test_123', 'order_test_123');
+            await db.createUser(testEmail, hash, 'pay_test_123', 'order_test_123');
             res.json({ message: "Test user created: test@example.com / password123", email: testEmail });
         } else {
             res.json({ message: "Test user already exists", email: testEmail });
@@ -1187,7 +1187,7 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // Verify Token
-app.post('/api/auth/verify', (req, res) => {
+app.post('/api/auth/verify', async (req, res) => {
     try {
         const authHeader = req.headers['authorization'];
         const token = authHeader && authHeader.split(' ')[1];
@@ -1199,9 +1199,9 @@ app.post('/api/auth/verify', (req, res) => {
         const decoded = auth.verifyToken(token);
         if (decoded) {
             // Check if user has paid (has a Razorpay payment ID)
-            const user = db.getUserByEmail(decoded.email);
+            const user = await db.getUserByEmail(decoded.email);
             const isPaid = !!(user && user.razorpay_payment_id);
-            const userPlan = db.getUserPlan(decoded.userId);
+            const userPlan = await db.getUserPlan(decoded.userId);
             res.json({
                 valid: true,
                 userId: decoded.userId,
@@ -1242,7 +1242,7 @@ app.post('/api/auth/signup', async (req, res) => {
         await auth.registerFreeUser(email, password);
 
         // Auto-login (generate token)
-        const user = db.getUserByEmail(email);
+        const user = await db.getUserByEmail(email);
         const jwt = require('jsonwebtoken');
         const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
         const token = jwt.sign(
@@ -1284,14 +1284,14 @@ app.post('/api/auth/google', async (req, res) => {
         const email = payload.email;
 
         // Check if user exists
-        let user = db.getUserByEmail(email);
+        let user = await db.getUserByEmail(email);
 
         // If no user, create one (Freemium)
         if (!user) {
             // Generate random password for Google users
             const randomPassword = auth.generatePassword();
             await auth.registerFreeUser(email, randomPassword);
-            user = db.getUserByEmail(email);
+            user = await db.getUserByEmail(email);
 
             // Track Lead
             const { ip, userAgent, fbp, fbc } = getClientInfo(req);
@@ -1350,7 +1350,7 @@ app.post('/api/payment/create-order', async (req, res) => {
         }
 
         // Check if email already registered
-        if (db.emailExists(email)) {
+        if (await db.emailExists(email)) {
             return res.status(400).json({ error: 'Email already registered. Please login instead.' });
         }
 
@@ -1371,7 +1371,7 @@ app.post('/api/payment/create-order', async (req, res) => {
         fb.trackInitiateCheckout(email, amountValue, currency, ip, userAgent, fbp, fbc).catch(e => console.error(e));
 
         // Store pending order with currency
-        db.createPendingOrder(order.id, email, amountInSmallestUnit, currency);
+        await db.createPendingOrder(order.id, email, amountInSmallestUnit, currency);
 
         res.json({
             orderId: order.id,
@@ -1406,7 +1406,7 @@ app.post('/api/payment/verify', async (req, res) => {
         }
 
         // Get pending order to retrieve email
-        const pendingOrder = db.getPendingOrder(razorpay_order_id);
+        const pendingOrder = await db.getPendingOrder(razorpay_order_id);
 
         if (!pendingOrder) {
             return res.status(400).json({ error: 'Order not found' });
@@ -1422,7 +1422,7 @@ app.post('/api/payment/verify', async (req, res) => {
         );
 
         // Delete pending order
-        db.deletePendingOrder(razorpay_order_id);
+        await db.deletePendingOrder(razorpay_order_id);
 
         // Send credentials email
         await email.sendCredentialsEmail(credentials.email, credentials.password);
@@ -1469,7 +1469,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
         }
 
         // Check if user exists
-        const user = db.getUserByEmail(userEmail);
+        const user = await db.getUserByEmail(userEmail);
         if (!user) {
             // Don't reveal if email exists or not
             return res.json({ success: true, message: 'If this email exists, a reset link has been sent.' });
@@ -1480,7 +1480,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
         const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
 
         // Store token
-        db.createResetToken(userEmail, resetToken, expiresAt);
+        await db.createResetToken(userEmail, resetToken, expiresAt);
 
         // Send reset email
         const resetUrl = `${process.env.APP_URL || 'http://localhost:3002'}/reset-password.html?token=${resetToken}`;
@@ -1507,17 +1507,17 @@ app.post('/api/auth/reset-password', async (req, res) => {
         }
 
         // Validate token
-        const resetToken = db.getValidResetToken(token);
+        const resetToken = await db.getValidResetToken(token);
         if (!resetToken) {
             return res.status(400).json({ error: 'Invalid or expired reset link' });
         }
 
         // Update password
         const passwordHash = await auth.hashPassword(newPassword);
-        db.updatePassword(resetToken.email, passwordHash);
+        await db.updatePassword(resetToken.email, passwordHash);
 
         // Mark token as used
-        db.markTokenUsed(token);
+        await db.markTokenUsed(token);
 
         res.json({ success: true, message: 'Password reset successfully' });
     } catch (error) {
@@ -1533,7 +1533,7 @@ app.post('/api/video/generate', auth.requireAuth, apiLimiter, async (req, res) =
         const { imageUrl, prompt, model, endImageUrl, directorMode } = req.body;
 
         // Plan gating: Creator+ only for Director/Video
-        const userPlan = db.getUserPlan(user.userId);
+        const userPlan = await db.getUserPlan(user.userId);
         const planConfig = getPlanConfig(userPlan.plan);
         if (!planConfig.director) {
             return res.status(403).json({ error: 'Video generation requires Creator plan or higher. Upgrade to unlock!' });
@@ -1573,7 +1573,7 @@ app.post('/api/video/generate', auth.requireAuth, apiLimiter, async (req, res) =
                 console.log(`🎬 Veo generation started for ${user.email}: ${operation.name}`);
 
                 // Increment gen count
-                db.incrementGenCount(user.userId);
+                await db.incrementGenCount(user.userId);
 
                 res.json({
                     success: true,
@@ -1591,11 +1591,11 @@ app.post('/api/video/generate', auth.requireAuth, apiLimiter, async (req, res) =
         // LTX / Wan models use Replicate
         // Verify credit balance
         let VIDEO_COST = 5;
-        const userCredits = await db.getUserCredits(user.userId);
+        const userCredits = await await db.getUserCredits(user.userId);
         if (userCredits < VIDEO_COST) {
             return res.status(402).json({ error: 'Insufficient credits', required: VIDEO_COST, current: userCredits });
         }
-        await db.useCredits(user.userId, VIDEO_COST);
+        await await db.useCredits(user.userId, VIDEO_COST);
 
         const prediction = await replicate.generateVideoFromImage(imageUrl, prompt, model, { endImageUrl, directorMode });
         console.log(`🎬 Video generation started for ${user.email}: ${prediction.id} (Model: ${model || 'wan'}, Mode: ${directorMode || 'standard'})`);
@@ -1652,7 +1652,7 @@ app.get('/api/video/veo-status/:operationName', auth.requireAuth, async (req, re
 app.post('/api/video/generate-veo', auth.requireAuth, apiLimiter, async (req, res) => {
     try {
         const user = req.user;
-        const userPlan = db.getUserPlan(user.userId);
+        const userPlan = await db.getUserPlan(user.userId);
         const planConfig = getPlanConfig(userPlan.plan);
 
         if (!planConfig.veo) {
@@ -1679,7 +1679,7 @@ app.post('/api/video/generate-veo', auth.requireAuth, apiLimiter, async (req, re
         const operation = await ai.models.generateVideos(generateParams);
         console.log(`🎬 Veo standalone generation for ${user.email}: ${operation.name}`);
 
-        db.incrementGenCount(user.userId);
+        await db.incrementGenCount(user.userId);
 
         res.json({
             success: true,
@@ -1697,7 +1697,7 @@ app.post('/api/video/generate-veo', auth.requireAuth, apiLimiter, async (req, re
 app.get('/api/ugc/gallery/public', async (req, res) => {
     try {
         // limit to 50 latest public items
-        const assets = db.getPublicGallery(50);
+        const assets = await db.getPublicGallery(50);
         res.json({ assets });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -1716,7 +1716,7 @@ app.post('/api/image/generate-flux', auth.requireAuth, apiLimiter, async (req, r
 
         // Flux Cost (2 credits)
         const FLUX_COST = 2;
-        const userCredits = await db.getUserCredits(user.userId);
+        const userCredits = await await db.getUserCredits(user.userId);
 
         if (userCredits < FLUX_COST) {
             return res.status(402).json({
@@ -1726,7 +1726,7 @@ app.post('/api/image/generate-flux', auth.requireAuth, apiLimiter, async (req, r
             });
         }
 
-        await db.useCredits(user.userId, FLUX_COST);
+        await await db.useCredits(user.userId, FLUX_COST);
 
         const prediction = await replicate.generateImageFlux(prompt, aspectRatio);
 
@@ -1763,7 +1763,7 @@ app.get('/api/video/status/:id', auth.requireAuth, async (req, res) => {
 app.post('/api/ugc/generate-script', auth.requireAuth, apiLimiter, async (req, res) => {
     try {
         // Plan gating: Pro+ only
-        const userPlan = db.getUserPlan(req.user.userId);
+        const userPlan = await db.getUserPlan(req.user.userId);
         const planConfig = getPlanConfig(userPlan.plan);
         if (planConfig.ugc <= 0) {
             return res.status(403).json({ error: 'UGC Video Studio requires Pro plan or higher. Upgrade to unlock!' });
@@ -1845,7 +1845,7 @@ app.post('/api/ugc/projects', auth.requireAuth, async (req, res) => {
         // For MVP, we'll just create new or update if ID provided
         // Let's assume create for now, optimization later
 
-        const result = db.createUGCProject(userId, name || 'Untitled Project', JSON.stringify(workflow), thumbnail);
+        const result = await db.createUGCProject(userId, name || 'Untitled Project', JSON.stringify(workflow), thumbnail);
         res.json({ success: true, id: result.lastInsertRowid });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -1856,7 +1856,7 @@ app.post('/api/ugc/projects', auth.requireAuth, async (req, res) => {
 app.get('/api/ugc/projects', auth.requireAuth, async (req, res) => {
     try {
         const userId = auth.getUserId(req);
-        const projects = db.getUserProjects(userId);
+        const projects = await db.getUserProjects(userId);
         res.json({ projects });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -1866,7 +1866,7 @@ app.get('/api/ugc/projects', auth.requireAuth, async (req, res) => {
 // Load Project
 app.get('/api/ugc/projects/:id', auth.requireAuth, async (req, res) => {
     try {
-        const project = db.getProjectById(req.params.id);
+        const project = await db.getProjectById(req.params.id);
         if (!project) return res.status(404).json({ error: 'Project not found' });
         // Verify ownership
         // const userId = auth.getUserId(req);
@@ -1883,7 +1883,7 @@ app.get('/api/ugc/projects/:id', auth.requireAuth, async (req, res) => {
 app.get('/api/ugc/gallery', auth.requireAuth, async (req, res) => {
     try {
         const userId = auth.getUserId(req);
-        const assets = db.getUserGallery(userId);
+        const assets = await db.getUserGallery(userId);
         res.json({ assets });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -1905,7 +1905,7 @@ app.post('/api/ugc/render-scene', auth.requireAuth, apiLimiter, async (req, res)
 
         // --- Veo Video Generation Path ---
         if (model === 'veo') {
-            const userPlan = db.getUserPlan(userId);
+            const userPlan = await db.getUserPlan(userId);
             const planConfig = getPlanConfig(userPlan.plan);
 
             if (!planConfig.veo) {
@@ -1938,7 +1938,7 @@ app.post('/api/ugc/render-scene', auth.requireAuth, apiLimiter, async (req, res)
             }
 
             const operation = await ai.models.generateVideos(generateParams);
-            db.incrementGenerationCount(userId); // Deduct from BYOK limit
+            await db.incrementGenerationCount(userId); // Deduct from BYOK limit
 
             return res.json({ predictionId: operation.name, status: 'starting' });
         }
@@ -1975,7 +1975,7 @@ app.post('/api/ugc/gallery/add', auth.requireAuth, async (req, res) => {
     try {
         const { type, url, prompt, projectId } = req.body;
         const userId = auth.getUserId(req);
-        db.addToGallery(userId, projectId || null, type, url, prompt);
+        await db.addToGallery(userId, projectId || null, type, url, prompt);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -2018,12 +2018,12 @@ app.get('/api/ugc/render-scene/status/:id', auth.requireAuth, async (req, res) =
 });
 
 // Redirect root to landing page if not authenticated
-app.get('/', (req, res) => {
+app.get('/', async (req, res) => {
     res.redirect('/landing.html');
 });
 
 // Run founder migration on startup (idempotent)
-db.migrateFounders();
+// db.migrateFounders().catch(console.error); // Deprecated in Supabase architecture
 
 if (require.main === module) {
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

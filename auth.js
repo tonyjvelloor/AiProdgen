@@ -29,7 +29,7 @@ module.exports = {
     // Register new user after payment
     registerUser: async (email, paymentId, orderId, amountPaid = 0, currency = 'USD') => {
         // Check if email already exists
-        if (db.emailExists(email)) {
+        if (await db.emailExists(email)) {
             throw new Error('Email already registered');
         }
 
@@ -38,7 +38,7 @@ module.exports = {
         const passwordHash = await module.exports.hashPassword(password);
 
         // Create user
-        db.createUser(email, passwordHash, paymentId, orderId, amountPaid, currency);
+        await db.createUser(email, passwordHash, paymentId, orderId, amountPaid, currency);
 
         return { email, password };
     },
@@ -46,21 +46,21 @@ module.exports = {
     // Register FREE user (Freemium)
     registerFreeUser: async (email, password) => {
         // Check if email already exists
-        if (db.emailExists(email)) {
+        if (await db.emailExists(email)) {
             throw new Error('Email already registered');
         }
 
         const passwordHash = await module.exports.hashPassword(password);
 
         // Create user with null payment ID and 0 amount
-        db.createUser(email, passwordHash, null, null, 0, 'USD');
+        await db.createUser(email, passwordHash, null, null, 0, 'USD');
 
         return { email };
     },
 
     // Login user
     loginUser: async (email, password) => {
-        const user = db.getUserByEmail(email);
+        const user = await db.getUserByEmail(email);
 
         if (!user) {
             throw new Error('Invalid email or password');
@@ -88,7 +88,7 @@ module.exports = {
 
     // Change password
     changePassword: async (email, oldPassword, newPassword) => {
-        const user = db.getUserByEmail(email);
+        const user = await db.getUserByEmail(email);
 
         if (!user) {
             throw new Error('User not found');
@@ -101,7 +101,7 @@ module.exports = {
         }
 
         const newPasswordHash = await module.exports.hashPassword(newPassword);
-        db.updatePassword(email, newPasswordHash);
+        await db.updatePassword(email, newPasswordHash);
 
         return true;
     },
@@ -116,7 +116,7 @@ module.exports = {
     },
 
     // Middleware to check authentication
-    requireAuth: (req, res, next) => {
+    requireAuth: async (req, res, next) => {
         const token = req.headers.authorization?.replace('Bearer ', '') || req.cookies?.token;
 
         if (!token) {
