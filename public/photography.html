@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIProdGen - Product Photography Job</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#2563eb',
+                        secondary: '#1e40af',
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer components {
+            .btn { @apply inline-flex justify-center items-center rounded-md border border-transparent px-4 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors cursor-pointer; }
+            .btn-primary { @apply bg-primary text-white hover:bg-blue-600 focus:ring-primary; }
+            .btn-secondary { @apply bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-primary; }
+            .card { @apply bg-white shadow-sm rounded-xl border border-gray-200 overflow-hidden; }
+            .pack-card { @apply border border-gray-200 rounded-xl p-6 cursor-pointer hover:border-primary transition-colors hover:shadow-md relative; }
+            .pack-card.selected { @apply border-primary bg-blue-50 ring-2 ring-primary ring-opacity-50; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans min-h-screen flex flex-col">
+
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex">
+                    <div class="flex-shrink-0 flex items-center gap-2">
+                        <i data-lucide="layers" class="h-6 w-6 text-primary"></i>
+                        <span class="font-bold text-xl tracking-tight text-gray-900">AIProdGen</span>
+                    </div>
+                </div>
+                <div class="flex items-center">
+                    <a id="backBtn" href="/dashboard.html" class="btn btn-secondary text-sm">
+                        <i data-lucide="arrow-left" class="w-4 h-4 mr-2"></i> Back to Workspace
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-grow w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900 flex items-center gap-3">
+                <div class="bg-blue-100 p-2 rounded-lg text-primary">
+                    <i data-lucide="camera" class="w-6 h-6"></i>
+                </div>
+                Book a Photography Shoot
+            </h1>
+            <p class="mt-2 text-sm text-gray-500">Hire our AI production team to generate a complete pack of high-quality product photos.</p>
+        </div>
+
+        <!-- STAGE 1: Configuration -->
+        <div id="stage-config">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Left: Packs -->
+                <div class="lg:col-span-2">
+                    <h2 class="text-lg font-semibold text-gray-900 mb-4">Select Shoot Type</h2>
+                    <div id="packsGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Rendered by JS -->
+                        <div class="col-span-full py-12 text-center text-gray-500">
+                            <i data-lucide="loader-2" class="w-8 h-8 animate-spin mx-auto mb-2 text-primary"></i>
+                            Loading packs...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Settings & Summary -->
+                <div class="lg:col-span-1">
+                    <div class="card p-6 sticky top-24">
+                        <h3 class="text-base font-semibold text-gray-900 mb-4 border-b border-gray-100 pb-2">Shoot Settings</h3>
+                        
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Aspect Ratio</label>
+                            <select id="aspectRatio" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md border">
+                                <option value="1:1">Square (1:1) - Best for Instagram/Web</option>
+                                <option value="4:5">Portrait (4:5) - Best for Social</option>
+                                <option value="16:9">Landscape (16:9) - Best for Hero Banners</option>
+                            </select>
+                        </div>
+
+                        <div class="bg-gray-50 p-4 rounded-lg mb-6 border border-gray-200">
+                            <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Selected Pack Details</h4>
+                            <div id="packDetailsEmpty" class="text-sm text-gray-500 italic">Select a pack to see details.</div>
+                            <div id="packDetails" class="hidden">
+                                <p id="packName" class="font-medium text-gray-900 mb-1"></p>
+                                <p id="packDesc" class="text-xs text-gray-500 mb-3"></p>
+                                <ul id="packShots" class="text-xs text-gray-600 space-y-1 list-disc pl-4"></ul>
+                            </div>
+                        </div>
+
+                        <button id="startShootBtn" disabled class="w-full btn btn-primary py-3 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i data-lucide="play" class="w-4 h-4 mr-2"></i> Book Shoot
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STAGE 2: Processing (Polling) -->
+        <div id="stage-processing" class="hidden text-center py-24 bg-white rounded-xl border border-gray-200 shadow-sm">
+            <div class="relative w-24 h-24 mx-auto mb-6">
+                <!-- Outer spinning ring -->
+                <div class="absolute inset-0 rounded-full border-4 border-blue-100"></div>
+                <div class="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
+                <!-- Inner icon -->
+                <div class="absolute inset-0 flex items-center justify-center text-primary">
+                    <i data-lucide="camera" class="w-8 h-8"></i>
+                </div>
+            </div>
+            <h2 class="text-2xl font-bold text-gray-900 mb-2">Shoot is in Progress...</h2>
+            <p id="processingStatus" class="text-sm text-gray-500 max-w-md mx-auto">
+                The AI production team is currently shooting the assets. This typically takes 30-45 seconds for a full pack.
+            </p>
+        </div>
+
+        <!-- STAGE 3: Completed Results -->
+        <div id="stage-completed" class="hidden">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-900">Shoot Completed</h2>
+                    <p class="text-sm text-gray-500">Your photography pack has been generated and published to your Content Hub.</p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="window.location.reload()" class="btn btn-secondary">
+                        <i data-lucide="refresh-cw" class="w-4 h-4 mr-2"></i> Regenerate Pack
+                    </button>
+                    <a id="goToProductBtn" href="#" class="btn btn-primary">
+                        Return to Product
+                    </a>
+                </div>
+            </div>
+
+            <div id="resultsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- Rendered by JS -->
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        lucide.createIcons();
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = '/login.html';
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const productId = urlParams.get('product_id');
+        
+        if (!productId) {
+            alert('No product ID specified');
+            window.location.href = '/dashboard.html';
+        }
+
+        document.getElementById('backBtn').href = `/product.html?id=${productId}`;
+        document.getElementById('goToProductBtn').href = `/product.html?id=${productId}`;
+
+        let availablePacks = [];
+        let selectedPackId = null;
+        let pollInterval = null;
+
+        // Fetch Packs on load
+        async function fetchPacks() {
+            try {
+                const res = await fetch('/api/engines/photography/packs', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) throw new Error('Failed to fetch packs');
+                availablePacks = await res.json();
+                renderPacksGrid();
+            } catch (e) {
+                console.error(e);
+                alert('Error loading packs');
+            }
+        }
+
+        function renderPacksGrid() {
+            const grid = document.getElementById('packsGrid');
+            grid.innerHTML = availablePacks.map(pack => `
+                <div onclick="selectPack('${pack.id}')" id="pack-card-${pack.id}" class="pack-card group">
+                    <div class="absolute top-4 right-4 text-gray-300 group-hover:text-primary transition-colors">
+                        <i data-lucide="check-circle-2" class="w-6 h-6 ${selectedPackId === pack.id ? 'text-primary' : 'hidden'} select-icon"></i>
+                        <div class="${selectedPackId === pack.id ? 'hidden' : 'block'} w-6 h-6 rounded-full border-2 border-current select-ring"></div>
+                    </div>
+                    <h3 class="text-lg font-bold text-gray-900 mb-1">${pack.name}</h3>
+                    <p class="text-sm text-gray-500 mb-4">${pack.description}</p>
+                    <div class="flex items-center text-xs font-medium text-gray-700 bg-gray-100 inline-flex px-2 py-1 rounded">
+                        <i data-lucide="image" class="w-3 h-3 mr-1"></i> ${pack.shots.length} Shots
+                    </div>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function selectPack(packId) {
+            selectedPackId = packId;
+            const pack = availablePacks.find(p => p.id === packId);
+            
+            // Update UI Cards
+            document.querySelectorAll('.pack-card').forEach(el => el.classList.remove('selected'));
+            document.querySelectorAll('.select-icon').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.select-ring').forEach(el => el.classList.remove('hidden'));
+            
+            const selectedEl = document.getElementById(`pack-card-${packId}`);
+            selectedEl.classList.add('selected');
+            selectedEl.querySelector('.select-icon').classList.remove('hidden');
+            selectedEl.querySelector('.select-ring').classList.add('hidden');
+
+            // Update Details Panel
+            document.getElementById('packDetailsEmpty').classList.add('hidden');
+            document.getElementById('packDetails').classList.remove('hidden');
+            document.getElementById('packName').textContent = pack.name;
+            document.getElementById('packDesc').textContent = pack.description;
+            document.getElementById('packShots').innerHTML = pack.shots.map(s => `<li><span class="font-semibold">${s.name}</span></li>`).join('');
+
+            // Enable Button
+            document.getElementById('startShootBtn').disabled = false;
+        }
+
+        document.getElementById('startShootBtn').addEventListener('click', async () => {
+            const aspectRatio = document.getElementById('aspectRatio').value;
+            
+            document.getElementById('stage-config').classList.add('hidden');
+            document.getElementById('stage-processing').classList.remove('hidden');
+
+            try {
+                const res = await fetch(`/api/products/${productId}/jobs/photography`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ packId: selectedPackId, aspectRatio })
+                });
+                
+                if (!res.ok) throw new Error('Failed to start shoot');
+                const collection = await res.json();
+                
+                startPolling(collection.id);
+            } catch (e) {
+                console.error(e);
+                alert('Error starting shoot');
+                document.getElementById('stage-config').classList.remove('hidden');
+                document.getElementById('stage-processing').classList.add('hidden');
+            }
+        });
+
+        function startPolling(collectionId) {
+            pollInterval = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api/collections/${collectionId}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    const collection = await res.json();
+                    
+                    if (collection.status === 'completed' || collection.status === 'failed') {
+                        clearInterval(pollInterval);
+                        if (collection.status === 'completed') {
+                            showResults(collection);
+                        } else {
+                            alert('Job failed during execution.');
+                            document.getElementById('stage-config').classList.remove('hidden');
+                            document.getElementById('stage-processing').classList.add('hidden');
+                        }
+                    } else if (collection.status === 'running') {
+                        document.getElementById('processingStatus').textContent = `Shooting in progress... Generated ${collection.outputs ? collection.outputs.length : 0} shots so far.`;
+                    }
+                } catch (e) {
+                    console.error('Polling error:', e);
+                }
+            }, 3000); // Poll every 3s
+        }
+
+        function showResults(collection) {
+            document.getElementById('stage-processing').classList.add('hidden');
+            document.getElementById('stage-completed').classList.remove('hidden');
+
+            const grid = document.getElementById('resultsGrid');
+            grid.innerHTML = collection.outputs.map(output => `
+                <div class="card overflow-hidden group">
+                    <div class="aspect-square bg-gray-100 relative">
+                        <img src="${output.storage_path}" class="w-full h-full object-cover">
+                        <div class="absolute inset-0 bg-black bg-opacity-40 flex flex-col justify-end p-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onclick="setPrimary('${output.id}')" class="btn btn-primary w-full shadow-lg text-xs py-2">
+                                <i data-lucide="star" class="w-3 h-3 mr-1"></i> Set as Primary
+                            </button>
+                        </div>
+                    </div>
+                    <div class="p-4 bg-white border-t border-gray-100 flex justify-between items-center">
+                        <span class="text-sm font-semibold text-gray-900">${output.format}</span>
+                        <span class="text-xs text-green-600 font-medium bg-green-50 px-2 py-1 rounded-full flex items-center">
+                            <i data-lucide="check" class="w-3 h-3 mr-1"></i> ${output.status}
+                        </span>
+                    </div>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        async function setPrimary(outputId) {
+            try {
+                const res = await fetch(`/api/products/${productId}/primary-output`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ outputId })
+                });
+                
+                if (res.ok) {
+                    alert('Primary image updated successfully! Launch Readiness will increase.');
+                    window.location.href = `/product.html?id=${productId}`;
+                } else {
+                    throw new Error('Update failed');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Error setting primary image');
+            }
+        }
+
+        // Init
+        fetchPacks();
+    </script>
+</body>
+</html>

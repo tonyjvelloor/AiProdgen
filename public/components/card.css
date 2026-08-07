@@ -1,0 +1,21 @@
+/* public/components/card.css */
+@layer components {
+  .card {
+    @apply bg-white overflow-hidden shadow rounded-lg border border-gray-200 transition-all;
+  }
+  .card-hover {
+    @apply hover:shadow-md hover:border-primary cursor-pointer;
+  }
+  .card-selected {
+    @apply ring-2 ring-primary border-transparent bg-blue-50;
+  }
+  .card-body {
+    @apply px-4 py-5 sm:p-6;
+  }
+  .card-header {
+    @apply px-4 py-5 border-b border-gray-200 sm:px-6;
+  }
+  .card-footer {
+    @apply px-4 py-4 sm:px-6 bg-gray-50 border-t border-gray-200;
+  }
+}

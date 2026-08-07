@@ -1,0 +1,21 @@
+/* public/components/button.css */
+@layer components {
+  .btn {
+    @apply inline-flex justify-center items-center rounded-md border border-transparent px-4 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors;
+  }
+  .btn-primary {
+    @apply bg-primary text-white hover:bg-blue-600 focus:ring-primary;
+  }
+  .btn-secondary {
+    @apply bg-indigo-100 text-indigo-700 hover:bg-indigo-200 focus:ring-indigo-500;
+  }
+  .btn-outline {
+    @apply border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-primary;
+  }
+  .btn-danger {
+    @apply bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+  }
+  .btn:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+}

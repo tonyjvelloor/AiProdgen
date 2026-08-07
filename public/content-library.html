@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIProdGen - Content Library</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#2563eb',
+                        secondary: '#1e40af',
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer components {
+            .btn { @apply inline-flex justify-center items-center rounded-md border border-transparent px-4 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors cursor-pointer; }
+            .btn-primary { @apply bg-primary text-white hover:bg-blue-600 focus:ring-primary; }
+            .btn-secondary { @apply bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-primary; }
+            .card { @apply bg-white shadow-sm rounded-xl border border-gray-200 overflow-hidden; }
+            .tab-btn { @apply px-4 py-2 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:text-gray-700 hover:border-gray-300 transition-colors focus:outline-none; }
+            .tab-btn.active { @apply text-primary border-primary; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans min-h-screen flex flex-col">
+
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex">
+                    <div class="flex-shrink-0 flex items-center gap-2">
+                        <i data-lucide="layers" class="h-6 w-6 text-primary"></i>
+                        <span class="font-bold text-xl tracking-tight text-gray-900">AIProdGen</span>
+                    </div>
+                    <div class="hidden sm:ml-8 sm:flex sm:space-x-8">
+                        <a href="/dashboard.html" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Workspace</a>
+                        <a href="/content-library.html" class="border-primary text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Content Library</a>
+                        <a href="/creations.html" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Legacy Hub</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <div class="mb-6">
+            <h1 class="text-3xl font-bold text-gray-900">Content Hub</h1>
+            <p class="mt-2 text-sm text-gray-500">All marketing assets generated across your workspace.</p>
+        </div>
+
+        <!-- View Toggle Tabs -->
+        <div class="border-b border-gray-200 mb-8">
+            <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                <button onclick="switchView('collections')" id="tab-collections" class="tab-btn active">By Collection</button>
+                <button onclick="switchView('content')" id="tab-content" class="tab-btn">By Content Type</button>
+                <button onclick="switchView('product')" id="tab-product" class="tab-btn">By Product</button>
+            </nav>
+        </div>
+
+        <div id="loadingOutputs" class="flex justify-center py-12">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+
+        <div id="emptyState" class="hidden text-center py-24 bg-white rounded-xl border border-dashed border-gray-300">
+            <div class="mx-auto h-12 w-12 text-gray-400 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                <i data-lucide="image" class="h-6 w-6"></i>
+            </div>
+            <h3 class="text-lg font-medium text-gray-900">No content yet</h3>
+            <p class="mt-1 text-sm text-gray-500 mb-6">Go to a Product to generate your first asset.</p>
+        </div>
+
+        <!-- Views Container -->
+        <div id="viewsContainer" class="hidden space-y-12">
+            <!-- Rendered via JS -->
+        </div>
+
+    </main>
+
+    <script>
+        lucide.createIcons();
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = '/login.html';
+
+        let currentView = 'collections'; // 'collections', 'content', 'product'
+        let rawData = []; // This will eventually hold real data from GET /api/workspace/outputs
+
+        function switchView(view) {
+            currentView = view;
+            
+            // Update tabs
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active', 'border-primary', 'text-primary'));
+            document.getElementById(`tab-${view}`).classList.add('active', 'border-primary', 'text-primary');
+
+            renderView();
+        }
+
+        async function loadContent() {
+            try {
+                // In Week 2, we will fetch real data:
+                // const res = await fetch('/api/workspace/outputs', { headers: { 'Authorization': `Bearer ${token}` } });
+                // rawData = await res.json();
+                
+                // MOCK DATA for Week 1.5 Polish UI
+                rawData = [
+                    { id: '1', product_name: 'Running Shoes', engine: 'photography', collection_name: 'Studio Pack 1', storage_path: 'https://placehold.co/400x400/blue/white?text=Photo+1' },
+                    { id: '2', product_name: 'Running Shoes', engine: 'photography', collection_name: 'Studio Pack 1', storage_path: 'https://placehold.co/400x400/blue/white?text=Photo+2' },
+                    { id: '3', product_name: 'Coffee Maker', engine: 'original_upload', collection_name: 'Original', storage_path: 'https://placehold.co/400x400/gray/white?text=Original' },
+                    { id: '4', product_name: 'Running Shoes', engine: 'marketplace', collection_name: 'Amazon Hero', storage_path: 'https://placehold.co/400x400/orange/white?text=Amazon' },
+                ];
+
+                document.getElementById('loadingOutputs').classList.add('hidden');
+                
+                if (rawData.length === 0) {
+                    document.getElementById('emptyState').classList.remove('hidden');
+                } else {
+                    document.getElementById('viewsContainer').classList.remove('hidden');
+                    renderView();
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function renderView() {
+            const container = document.getElementById('viewsContainer');
+            container.innerHTML = '';
+
+            // Group data based on selected view
+            const grouped = {};
+            
+            rawData.forEach(item => {
+                let key = '';
+                if (currentView === 'collections') {
+                    key = `${item.product_name} - ${item.collection_name}`;
+                } else if (currentView === 'content') {
+                    key = item.engine.toUpperCase();
+                } else if (currentView === 'product') {
+                    key = item.product_name;
+                }
+
+                if (!grouped[key]) grouped[key] = [];
+                grouped[key].push(item);
+            });
+
+            // Render groups
+            for (const [groupName, items] of Object.entries(grouped)) {
+                
+                let gridHtml = items.map(item => `
+                    <div class="card relative group cursor-pointer aspect-square bg-gray-100 overflow-hidden">
+                        <img src="${item.storage_path}" class="w-full h-full object-cover transition-transform group-hover:scale-105">
+                        <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-opacity flex items-center justify-center opacity-0 group-hover:opacity-100">
+                            <button class="btn btn-secondary shadow text-xs"><i data-lucide="download" class="w-4 h-4 mr-2"></i>Download</button>
+                        </div>
+                    </div>
+                `).join('');
+
+                const section = `
+                    <section>
+                        <h2 class="text-xl font-bold text-gray-900 mb-4 pb-2 border-b border-gray-200">${groupName}</h2>
+                        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                            ${gridHtml}
+                        </div>
+                    </section>
+                `;
+                container.insertAdjacentHTML('beforeend', section);
+            }
+            
+            lucide.createIcons();
+        }
+        
+        loadContent();
+    </script>
+</body>
+</html>

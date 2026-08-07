@@ -1,0 +1,21 @@
+/* public/components/modal.css */
+@layer components {
+  .modal-overlay {
+    @apply fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity z-40 hidden;
+  }
+  .modal-overlay.active {
+    @apply block;
+  }
+  .modal-container {
+    @apply fixed inset-0 z-50 overflow-y-auto hidden;
+  }
+  .modal-container.active {
+    @apply block;
+  }
+  .modal-content {
+    @apply flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0;
+  }
+  .modal-panel {
+    @apply relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg;
+  }
+}

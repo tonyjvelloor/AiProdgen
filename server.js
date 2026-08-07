@@ -1,9 +1,29 @@
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
+const emailService = require('./lib/email');
+const uuidv4 = () => crypto.randomUUID();
 const helmet = require('helmet');
 const compression = require('compression');
-const rateLimit = require('express-rate-limit');
+const Sentry = require('@sentry/node');
+const { nodeProfilingIntegration } = require('@sentry/profiling-node');
+
+// Initialize Sentry before anything else
+if (process.env.SENTRY_DSN) {
+    Sentry.init({
+        dsn: process.env.SENTRY_DSN,
+        integrations: [
+            nodeProfilingIntegration(),
+        ],
+        environment: process.env.NODE_ENV || 'development',
+        release: process.env.npm_package_version || '1.0.0',
+        tracesSampleRate: 1.0, 
+        profilesSampleRate: 1.0,
+    });
+    console.log("Sentry initialized.");
+}
+
+const { requireLoginRateLimit, requireApiRateLimit, requireGenerateRateLimit, requireEmailVerifyRateLimit } = require('./lib/ratelimit');
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 require('dotenv').config();
 
@@ -15,6 +35,17 @@ const fb = require('./services/facebook');
 const replicate = require('./services/replicate');
 const cookieParser = require('cookie-parser');
 const { GoogleGenAI } = require('@google/genai');
+
+// V2 Services
+const WorkspaceService = require('./lib/workspace_service');
+const ProductService = require('./lib/product_service');
+const OutputService = require('./lib/output_service');
+const JobRegistry = require('./lib/job_registry');
+const PhotographyEngine = require('./lib/engines/photography');
+const CommerceEngine = require('./lib/engines/commerce');
+const BlueprintEngine = require('./lib/engines/blueprint');
+const ProductionEngine = require('./lib/engines/production');
+const { supabaseAdmin } = require('./lib/supabase');
 
 // ... (existing code)
 
@@ -40,6 +71,11 @@ if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// The request handler must be the first middleware on the app
+if (process.env.SENTRY_DSN) {
+    Sentry.setupExpressErrorHandler(app);
+}
 
 // Middleware
 // Security headers
@@ -85,25 +121,147 @@ app.use(cors({
     credentials: true
 }));
 
-// Global rate limiter (100 requests per minute per IP)
-const globalLimiter = rateLimit({
-    windowMs: 60 * 1000, // 1 minute
-    max: 100,
-    message: { error: 'Too many requests, please try again later.' },
-    standardHeaders: true,
-    legacyHeaders: false,
-});
-app.use(globalLimiter);
+// Rate Limits
+app.use(requireApiRateLimit);
 
-// Stricter rate limit for API generation endpoints
-const apiLimiter = rateLimit({
-    windowMs: 60 * 1000,
-    max: 10, // Conservative limit for free tier (allows breathing room)
-    message: { error: 'Rate limit exceeded. Please wait before generating more images.' },
+
+// ==========================================
+// COMPOSABLE MIDDLEWARES
+// ==========================================
+const requireVerifiedUser = (req, res, next) => {
+    if (!req.user.verified) {
+        return res.status(403).json({ error: 'Email verification required to perform this action.' });
+    }
+    next();
+};
+
+const requireCredits = async (req, res, next) => {
+    // Only applies to non-free operations or we let the engines reserve exact amounts.
+    // This is a top-level gate to prevent spam if balance is <= 0
+    try {
+        const balance = await db.getUserCredits(req.user.userId);
+        if (balance <= 0) {
+            return res.status(402).json({ error: 'Insufficient credits.' });
+        }
+        next();
+    } catch (e) {
+        return res.status(500).json({ error: 'Failed to verify credits' });
+    }
+};
+
+// ==========================================
+// SPRINT 1: RAZORPAY WEBHOOK (Idempotent)
+// ==========================================
+// NOTE: express.raw() is required to verify the raw payload signature
+app.post('/api/webhooks/razorpay', express.raw({ type: 'application/json' }), async (req, res) => {
+    try {
+        const signature = req.headers['x-razorpay-signature'];
+        if (!signature) return res.status(400).send('Missing signature');
+
+        // Verify webhook signature using the raw body buffer
+        const expectedSignature = crypto
+            .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET)
+            .update(req.body)
+            .digest('hex');
+
+        if (expectedSignature !== signature) {
+            console.error('❌ Invalid webhook signature');
+            return res.status(400).send('Invalid signature');
+        }
+
+        const payload = JSON.parse(req.body.toString());
+        console.log('✅ Razorpay Webhook Received:', payload.event);
+
+        const { supabaseAdmin } = require('./lib/supabase');
+        
+        // Log webhook event
+        try {
+            await supabaseAdmin.from('webhook_events').insert({
+                event_id: payload.event,
+                payload: payload
+            });
+        } catch (e) {
+            console.error('Failed to log webhook event (may already exist or schema missing):', e.message);
+        }
+
+        if (payload.event === 'payment.captured' || payload.event === 'order.paid') {
+            const payment = payload.payload.payment.entity;
+            const orderId = payment.order_id;
+            const paymentId = payment.id;
+            
+            const notes = payment.notes || {};
+            const userId = notes.userId;
+            const creditsToGrant = parseInt(notes.credits, 10);
+            
+            if (!userId || !creditsToGrant) {
+                console.warn('⚠️ Webhook missing userId or credits in notes, skipping.');
+                return res.status(200).send('Skipped: No user data in notes');
+            }
+
+            // Check Idempotency (has this payment already been processed?)
+            const { data: existingTx } = await supabaseAdmin.from('credit_transactions')
+                .select('id')
+                .eq('reference_id', paymentId)
+                .maybeSingle();
+
+            if (existingTx) {
+                console.log('🔄 Payment already processed, skipping:', paymentId);
+                return res.status(200).send('Already processed');
+            }
+
+            // Grant credits via ledger (append-only)
+            await db.recordCreditPurchase(userId, creditsToGrant, payment.amount / 100, paymentId, orderId);
+            console.log(`✅ Successfully granted ${creditsToGrant} credits to user ${userId} via Webhook`);
+            
+            // Mark processed
+            try {
+                await supabaseAdmin.from('webhook_events')
+                    .update({ processed: true, processed_at: new Date().toISOString() })
+                    .eq('event_id', payload.event);
+            } catch (e) {}
+        }
+
+        res.status(200).send('OK');
+    } catch (error) {
+        console.error('❌ Webhook error:', error.message);
+        
+        // Attempt to log error if payload exists
+        try {
+            const payload = JSON.parse(req.body.toString());
+            const { supabaseAdmin } = require('./lib/supabase');
+            await supabaseAdmin.from('webhook_events')
+                .update({ error: error.message })
+                .eq('event_id', payload.event);
+        } catch (e) {}
+
+        // Do not return 500 otherwise Razorpay will endlessly retry
+        res.status(200).send('Error but acknowledged'); 
+    }
 });
+
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
+
+// ==========================================
+// AUTH ENDPOINTS
+// ==========================================
+app.get('/api/auth/verify-email', async (req, res) => {
+    try {
+        const { token } = req.query;
+        if (!token) return res.status(400).send('Missing token');
+        
+        const success = await db.verifyEmailToken(token);
+        if (success) {
+            // Redirect to dashboard with success message
+            res.redirect('/dashboard.html?verified=true');
+        } else {
+            res.status(400).send('Invalid or expired verification link.');
+        }
+    } catch (e) {
+        res.status(500).send('Error verifying email.');
+    }
+});
 
 // Fallback API key from environment
 const DEFAULT_API_KEY = process.env.GEMINI_API_KEY;
@@ -224,7 +382,7 @@ const MARKETING_PREPROMPTS = {
 };
 
 // 1. Generate Text Route
-app.post('/api/generate-text', auth.requireAuth, apiLimiter, async (req, res) => {
+app.post('/api/generate-text', auth.requireAuth, requireVerifiedUser, requireGenerateRateLimit, async (req, res) => {
     try {
         const { prompt, prepromptType } = req.body;
         const apiKey = getApiKey(req);
@@ -253,7 +411,97 @@ app.post('/api/generate-text', auth.requireAuth, apiLimiter, async (req, res) =>
 });
 
 // 2. Generate Image Route - Uses Gemini 2.0 Flash
-app.post('/api/generate-image', auth.requireAuth, apiLimiter, async (req, res) => {
+// V2 Workspace API
+app.get('/api/workspace', auth.requireAuth, async (req, res) => {
+    try {
+        const workspace = await WorkspaceService.getOrCreateWorkspace(req.user.userId);
+        res.json(workspace);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// V2 Products API
+app.get('/api/products', auth.requireAuth, async (req, res) => {
+    try {
+        const workspace = await WorkspaceService.getOrCreateWorkspace(req.user.userId);
+        const products = await ProductService.getProductsForWorkspace(workspace.id);
+        res.json(products);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/products', auth.requireAuth, async (req, res) => {
+    try {
+        const { name, category, base64Image } = req.body;
+        if (!name || !base64Image) {
+            return res.status(400).json({ error: 'Name and image are required.' });
+        }
+
+        const workspace = await WorkspaceService.getOrCreateWorkspace(req.user.userId);
+
+        // 1. Create Product (Primary Output ID null for now)
+        const product = await ProductService.createProduct(workspace.id, { name, category });
+
+        // 2. Upload Image to Supabase
+        const buffer = Buffer.from(base64Image.replace(/^data:image\/\w+;base64,/, ""), 'base64');
+        const filename = `${req.user.userId}/${product.id}_initial.jpg`;
+        const { error: storageError } = await supabaseAdmin.storage.from('product-images').upload(filename, buffer, { contentType: 'image/jpeg', upsert: true });
+        
+        if (storageError) throw new Error(`Storage upload failed: ${storageError.message}`);
+        const { data: publicUrlData } = supabaseAdmin.storage.from('product-images').getPublicUrl(filename);
+
+        // 3. Create Output Collection
+        const collection = await OutputService.createCollection(product.id, 'initial_upload', { type: 'manual_upload' });
+        await OutputService.updateCollectionStatus(collection.id, 'completed');
+
+        // 4. Create Output
+        const output = await OutputService.createOutput(product.id, collection.id, {
+            engine: 'manual',
+            format: 'original',
+            storage_path: publicUrlData.publicUrl
+        });
+
+        // 5. Link Primary Output
+        const updatedProduct = await ProductService.updateProduct(product.id, { primary_output_id: output.id });
+
+        res.json(updatedProduct);
+    } catch (error) {
+        console.error('Error creating product:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/products/:id', auth.requireAuth, async (req, res) => {
+    try {
+        const product = await ProductService.getProductById(req.params.id);
+        const workspace = await WorkspaceService.getOrCreateWorkspace(req.user.userId);
+        if (product.workspace_id !== workspace.id) {
+            return res.status(403).json({ error: 'Unauthorized' });
+        }
+        res.json(product);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.put('/api/products/:id', auth.requireAuth, async (req, res) => {
+    try {
+        const product = await ProductService.getProductById(req.params.id);
+        const workspace = await WorkspaceService.getOrCreateWorkspace(req.user.userId);
+        if (product.workspace_id !== workspace.id) {
+            return res.status(403).json({ error: 'Unauthorized' });
+        }
+        
+        const updatedProduct = await ProductService.updateProduct(req.params.id, req.body);
+        res.json(updatedProduct);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/generate-image', auth.requireAuth, requireVerifiedUser, requireGenerateRateLimit, async (req, res) => {
     try {
         const { prompt, images, mode, modelEthnicity, modelGender } = req.body;
         const userId = req.user.userId;
@@ -358,7 +606,7 @@ app.post('/api/generate-image', auth.requireAuth, apiLimiter, async (req, res) =
 
         // Log successful generation and track usage
         if (userId && userId > 0) {
-            await db.logGeneration(userId, prompt, 1);
+            await db.logGeneration(userId, 'google', 'gemini-2.5-flash-image', 0, 0, 0.005, 1, 0, 'success', null, null, null, null);
             // Increment monthly gen count for paid plans
             if (planConfig.type === 'server' && userPlan.plan !== 'lifetime_founder') {
                 await db.incrementGenCount(userId);
@@ -406,7 +654,7 @@ app.post('/api/validate-key', async (req, res) => {
 });
 
 // 4. Real-ESRGAN Upscale Route (using Replicate API)
-app.post('/api/upscale-esrgan', auth.requireAuth, apiLimiter, async (req, res) => {
+app.post('/api/upscale-esrgan', auth.requireAuth, requireVerifiedUser, requireGenerateRateLimit, async (req, res) => {
     try {
         const { image, scale = 4, face_enhance = false } = req.body;
         const replicateApiKey = process.env.REPLICATE_API_TOKEN;
@@ -578,6 +826,12 @@ app.post('/api/credits/purchase', auth.requireAuth, async (req, res) => {
         const useCurrency = (currency === 'USD') ? 'USD' : 'INR';
         const amount = (useCurrency === 'USD') ? pkg.amount_usd : pkg.amount_inr;
 
+        // Get user for their ID
+        const user = await db.getUserByEmail(req.user.email);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
         const order = await razorpay.orders.create({
             amount: amount,
             currency: useCurrency,
@@ -586,7 +840,8 @@ app.post('/api/credits/purchase', auth.requireAuth, async (req, res) => {
                 type: 'credit_purchase',
                 package: packageId,
                 credits: pkg.credits,
-                email: req.user.email
+                email: req.user.email,
+                userId: user.id
             }
         });
 
@@ -810,7 +1065,7 @@ app.post('/api/plan/verify', auth.requireAuth, async (req, res) => {
 });
 
 // Paid upscale endpoint (uses credits)
-app.post('/api/upscale-esrgan-paid', apiLimiter, auth.requireAuth, async (req, res) => {
+app.post('/api/upscale-esrgan-paid', auth.requireAuth, requireVerifiedUser, requireGenerateRateLimit, async (req, res) => {
     try {
         const { image, scale = 4, face_enhance = false } = req.body;
         const replicateApiKey = process.env.REPLICATE_API_TOKEN;
@@ -966,7 +1221,7 @@ app.get('/api/user/stats', auth.requireAuth, async (req, res) => {
 });
 
 // 5. Upscale Image Route - Uses Gemini to enhance image quality
-app.post('/api/upscale-image', apiLimiter, async (req, res) => {
+app.post('/api/upscale-image', requireGenerateRateLimit, async (req, res) => {
     try {
         const { image } = req.body;
         const apiKey = getApiKey(req);
@@ -1107,6 +1362,102 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
 });
 
 // Create User (Admin)
+
+// ==========================================
+// SPRINT 1: ADMIN METRICS DASHBOARD
+// ==========================================
+app.get('/api/admin/metrics', auth.requireAuth, async (req, res) => {
+    try {
+        const { supabaseAdmin } = require('./lib/supabase');
+        
+        // --- 1. Revenue & Customers ---
+        // (Mocking financials based on users for now, or querying real data)
+        const { count: activeUsers } = await supabaseAdmin.from('users').select('*', { count: 'exact', head: true });
+        
+        // --- 2. Products & Production ---
+        const { data: workspaces } = await supabaseAdmin.from('workspaces').select('id');
+        const workspaceIds = workspaces?.map(w => w.id) || [];
+        
+        let activeProducts = 0;
+        let photographyReady = 0;
+        let marketplaceReady = 0;
+        let advertisingReady = 0;
+        
+        if (workspaceIds.length > 0) {
+            const { data: products } = await supabaseAdmin.from('products').select('id, status');
+            activeProducts = products?.length || 0;
+            
+            // Query output_collections to figure out completion rates
+            const { data: collections } = await supabaseAdmin.from('output_collections').select('product_id, engine, status');
+            if (collections) {
+                const productEngines = {};
+                collections.forEach(c => {
+                    if (c.status === 'completed') {
+                        if (!productEngines[c.product_id]) productEngines[c.product_id] = new Set();
+                        productEngines[c.product_id].add(c.engine);
+                    }
+                });
+                
+                Object.values(productEngines).forEach(engines => {
+                    if (engines.has('photography')) photographyReady++;
+                    if (engines.has('commerce')) marketplaceReady++;
+                    if (engines.has('campaign_blueprint')) advertisingReady++;
+                });
+            }
+        }
+        
+        // Outcomes
+        const productsLaunched = marketplaceReady;
+        // Estimated Time Saved = 4.2h per commerce pack + 2.5h per photo pack
+        const timeSaved = (marketplaceReady * 4.2 + photographyReady * 2.5).toFixed(1);
+        
+        // Growth
+        const productsCompleted = marketplaceReady; // Temporary proxy
+        
+        // Mocking some financial / production numbers for the prototype
+        res.json({
+            revenue: {
+                aiCost: `$${(activeUsers * 2.4).toFixed(2)}`,
+                today: `$29.00`,
+                margin: `82%`
+            },
+            customers: {
+                activeUsers: activeUsers || 0,
+                activeProducts: activeProducts,
+                repeatUsage: `42%`
+            },
+            production: {
+                runs: 124,
+                successRate: `98.2%`,
+                avgTime: `3.2m`,
+                avgCost: `$0.12`
+            },
+            progress: {
+                photographyReady,
+                marketplaceReady,
+                blueprintReady: advertisingReady,
+                avgProductReadiness: `64%`,
+                timeToCampaign: `48m`,
+                mostCommonDropoff: `Photography`
+            },
+            outcomes: {
+                campaignsProduced: productsLaunched,
+                timeSaved,
+                assetReuseRate: `1.8x`
+            },
+            growth: {
+                trialPaid: `14%`,
+                productsCompleted,
+                outputsPerProduct: 12
+            }
+        });
+    } catch (error) {
+        console.error('Admin metrics error:', error);
+        res.status(500).json({ error: 'Failed to load metrics' });
+    }
+});
+
+
 app.post('/api/admin/users', requireAdmin, async (req, res) => {
     try {
         const { email, password, is_active = true } = req.body;
@@ -1171,7 +1522,7 @@ app.post('/api/test/seed', async (req, res) => {
 // ============ AUTHENTICATION ROUTES ============
 
 // Login
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', requireLoginRateLimit, async (req, res) => {
     try {
         const { email, password } = req.body;
 
@@ -1225,8 +1576,80 @@ const { OAuth2Client } = require('google-auth-library');
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
+
+// ==========================================
+// SPRINT 1: EMAIL VERIFICATION
+// ==========================================
+app.get('/api/auth/verify-email', async (req, res) => {
+    try {
+        const { token } = req.query;
+        if (!token) return res.status(400).send('Missing token');
+
+        // Check if token exists and is valid
+        const { supabaseAdmin } = require('./lib/supabase');
+        
+        // Find token
+        const { data: tokenData } = await supabaseAdmin.from('auth_tokens')
+            .select('*')
+            .eq('token_hash', token)
+            .eq('type', 'email_verification')
+            .gt('expires_at', new Date().toISOString())
+            .maybeSingle();
+
+        if (!tokenData) {
+            return res.status(400).send('Invalid or expired token.');
+        }
+
+        // Delete token
+        await supabaseAdmin.from('auth_tokens').delete().eq('id', tokenData.id);
+
+        res.redirect('/dashboard.html?verified=true');
+    } catch (error) {
+        console.error('Email verification error:', error);
+        res.status(500).send('Verification failed.');
+    }
+});
+
+app.post('/api/auth/resend-verification', requireEmailVerifyRateLimit, async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({ error: 'Email is required' });
+        }
+        
+        const { supabaseAdmin } = require('./lib/supabase');
+        
+        const { data: user } = await supabaseAdmin.from('users').select('id, is_active').eq('email', email).maybeSingle();
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        // Check if already active/verified
+        if (user.is_active) {
+            return res.status(400).json({ error: 'Email is already verified' });
+        }
+
+        const verificationToken = uuidv4();
+        await supabaseAdmin.from('auth_tokens').insert({
+            user_id: user.id,
+            token_hash: verificationToken,
+            type: 'email_verification',
+            expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+        });
+        
+        const verificationLink = `${process.env.APP_URL || 'http://localhost:3000'}/api/auth/verify-email?token=${verificationToken}`;
+        await emailService.sendVerificationEmail(email, verificationLink);
+
+        res.json({ success: true, message: 'Verification email sent' });
+    } catch (error) {
+        console.error('Resend verification email error:', error);
+        res.status(500).json({ error: 'Failed to resend verification email' });
+    }
+});
+
+
 // Signup Endpoint (Freemium)
-app.post('/api/auth/signup', async (req, res) => {
+app.post('/api/auth/signup', requireLoginRateLimit, async (req, res) => {
     try {
         const { email, password } = req.body;
 
@@ -1251,9 +1674,24 @@ app.post('/api/auth/signup', async (req, res) => {
             { expiresIn: '7d' }
         );
 
+
         // Track Lead (New Signup)
         const { ip, userAgent, fbp, fbc } = getClientInfo(req);
         fb.trackLead(email, ip, userAgent, fbp, fbc).catch(e => console.error(e));
+
+        // Generate Verification Token
+        const { supabaseAdmin } = require('./lib/supabase');
+        const verificationToken = uuidv4();
+        await supabaseAdmin.from('auth_tokens').insert({
+            user_id: user.id,
+            token_hash: verificationToken,
+            type: 'email_verification',
+            expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
+        });
+
+        // Send Email
+        emailService.sendVerificationEmail(email, verificationToken).catch(e => console.error('Failed to send verification email:', e));
+
 
         res.json({ token, email: user.email });
 
@@ -1460,7 +1898,7 @@ app.post('/api/payment/verify', async (req, res) => {
 // ============ PASSWORD RESET ROUTES ============
 
 // Request password reset
-app.post('/api/auth/forgot-password', async (req, res) => {
+app.post('/api/auth/forgot-password', requireLoginRateLimit, async (req, res) => {
     try {
         const { email: userEmail } = req.body;
 
@@ -1494,7 +1932,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 });
 
 // Reset password with token
-app.post('/api/auth/reset-password', async (req, res) => {
+app.post('/api/auth/reset-password', requireLoginRateLimit, async (req, res) => {
     try {
         const { token, newPassword } = req.body;
 
@@ -1527,7 +1965,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
 });
 
 // Video Generation Endpoint (Creator+ plan required)
-app.post('/api/video/generate', auth.requireAuth, apiLimiter, async (req, res) => {
+app.post('/api/video/generate', auth.requireAuth, requireGenerateRateLimit, async (req, res) => {
     try {
         const user = req.user;
         const { imageUrl, prompt, model, endImageUrl, directorMode } = req.body;
@@ -1649,7 +2087,7 @@ app.get('/api/video/veo-status/:operationName', auth.requireAuth, async (req, re
 });
 
 // Google Veo Text-to-Video Endpoint (standalone, Creator+ required)
-app.post('/api/video/generate-veo', auth.requireAuth, apiLimiter, async (req, res) => {
+app.post('/api/video/generate-veo', auth.requireAuth, requireGenerateRateLimit, async (req, res) => {
     try {
         const user = req.user;
         const userPlan = await db.getUserPlan(user.userId);
@@ -1705,7 +2143,7 @@ app.get('/api/ugc/gallery/public', async (req, res) => {
 });
 
 // Flux Image Generation Endpoint (Casting)
-app.post('/api/image/generate-flux', auth.requireAuth, apiLimiter, async (req, res) => {
+app.post('/api/image/generate-flux', auth.requireAuth, requireGenerateRateLimit, async (req, res) => {
     try {
         const user = req.user;
         const { prompt, aspectRatio } = req.body;
@@ -1760,7 +2198,7 @@ app.get('/api/video/status/:id', auth.requireAuth, async (req, res) => {
 // ============ UGC NODE ENGINE ROUTES ============
 
 // Generate UGC Script via Gemini
-app.post('/api/ugc/generate-script', auth.requireAuth, apiLimiter, async (req, res) => {
+app.post('/api/ugc/generate-script', auth.requireAuth, requireGenerateRateLimit, async (req, res) => {
     try {
         // Plan gating: Pro+ only
         const userPlan = await db.getUserPlan(req.user.userId);
@@ -1893,7 +2331,7 @@ app.get('/api/ugc/gallery', auth.requireAuth, async (req, res) => {
 // ============ REVISED RENDER ROUTES (Auto-Save) ============
 
 // Render Scene with Face Consistency (InstantID) or Video (Veo)
-app.post('/api/ugc/render-scene', auth.requireAuth, apiLimiter, async (req, res) => {
+app.post('/api/ugc/render-scene', auth.requireAuth, requireGenerateRateLimit, async (req, res) => {
     try {
         const { prompt, faceImage, productImage, faceStrength, model } = req.body;
         const user = req.user;
@@ -2017,6 +2455,17 @@ app.get('/api/ugc/render-scene/status/:id', auth.requireAuth, async (req, res) =
     }
 });
 
+// Job Registry Route
+app.get('/api/jobs', auth.requireAuth, async (req, res) => {
+    try {
+        const jobs = JobRegistry.getJobs();
+        res.json(jobs);
+    } catch (error) {
+        console.error('Error fetching jobs:', error);
+        res.status(500).json({ error: 'Failed to fetch jobs' });
+    }
+});
+
 // Redirect root to landing page if not authenticated
 app.get('/', async (req, res) => {
     res.redirect('/landing.html');
@@ -2026,9 +2475,125 @@ app.get('/', async (req, res) => {
 // db.migrateFounders().catch(console.error); // Deprecated in Supabase architecture
 
 if (require.main === module) {
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+ // ==========================================
+// WEEK 2: PRODUCTION ENGINES & OUTPUTS
+// ==========================================
+
+// Get available photography packs
+app.get('/api/engines/photography/packs', auth.requireAuth, async (req, res) => {
+    try {
+        const packs = PhotographyEngine.getPacks();
+        res.json(packs);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Start a Photography Shoot
+app.post('/api/products/:id/jobs/photography', auth.requireAuth, async (req, res) => {
+    try {
+        const { packId, aspectRatio } = req.body;
+        const collection = await PhotographyEngine.startShoot(req.user.userId, req.params.id, packId, aspectRatio);
+        // Return 202 Accepted because the job runs asynchronously
+        res.status(202).json(collection);
+    } catch (error) {
+        console.error(error);
+        if (error.status === 403) return res.status(403).json({ error: error.message });
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get available commerce packs
+app.get('/api/engines/commerce/packs', auth.requireAuth, async (req, res) => {
+    try {
+        const packs = CommerceEngine.getPacks();
+        res.json(packs);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Start a Commerce Production Run
+app.post('/api/products/:id/jobs/commerce', auth.requireAuth, async (req, res) => {
+    try {
+        const { packId, productContext, inputImageId } = req.body;
+        const collection = await CommerceEngine.startRun(req.user.userId, req.params.id, packId, productContext, inputImageId);
+        // Return 202 Accepted because the job runs asynchronously
+        res.status(202).json(collection);
+    } catch (error) {
+        console.error(error);
+        if (error.status === 403) return res.status(403).json({ error: error.message });
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get available campaign blueprint packs
+app.get('/api/engines/campaign_blueprint/packs', auth.requireAuth, async (req, res) => {
+    try {
+        const packs = BlueprintEngine.getPacks();
+        res.json(packs);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Start a Campaign Blueprint Run
+app.post('/api/products/:id/jobs/campaign_blueprint', auth.requireAuth, async (req, res) => {
+    try {
+        const { packId, productContext, inputImageId } = req.body;
+        const collection = await BlueprintEngine.startRun(req.user.userId, req.params.id, packId, productContext, inputImageId);
+        res.status(202).json(collection);
+    } catch (error) {
+        console.error(error);
+        if (error.status === 403) return res.status(403).json({ error: error.message });
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Start Campaign Production Run
+app.post('/api/products/:id/jobs/campaign_production', auth.requireAuth, async (req, res) => {
+    try {
+        const { blueprintId, conceptIds, productContext } = req.body;
+        const collection = await ProductionEngine.startRun(req.user.userId, req.params.id, blueprintId, conceptIds, productContext);
+        res.status(202).json(collection);
+    } catch (error) {
+        console.error(error);
+        if (error.status === 403) return res.status(403).json({ error: error.message });
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Poll an Output Collection (Production Job) status
+app.get('/api/collections/:id', auth.requireAuth, async (req, res) => {
+    try {
+        const collection = await OutputService.getCollection(req.params.id);
+        res.json(collection);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Set Primary Output for a Product
+app.put('/api/products/:id/primary-output', auth.requireAuth, async (req, res) => {
+    try {
+        const { outputId } = req.body;
+        const { error } = await supabaseAdmin
+            .from('products')
+            .update({ primary_output_id: outputId })
+            .eq('id', req.params.id);
+
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Start the Server
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+});
 }
 module.exports = app;
-
-
-

@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIProdGen - Campaign Blueprint</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#2563eb',
+                        secondary: '#1e40af',
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer components {
+            .btn { @apply inline-flex justify-center items-center rounded-md border border-transparent px-4 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors cursor-pointer; }
+            .btn-primary { @apply bg-primary text-white hover:bg-blue-600 focus:ring-primary; }
+            .btn-secondary { @apply bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-primary; }
+            .card { @apply bg-white shadow-sm rounded-xl border border-gray-200 overflow-hidden; }
+            .pack-card { @apply border border-gray-200 rounded-xl p-6 cursor-pointer hover:border-primary transition-colors hover:shadow-md relative; }
+            .pack-card.selected { @apply border-primary bg-blue-50 ring-2 ring-primary ring-opacity-50; }
+            .concept-card { @apply bg-white rounded-xl border border-gray-200 shadow-sm p-5 relative transition-all; }
+            .concept-card.selected { @apply border-primary ring-2 ring-primary ring-opacity-50 bg-blue-50/10; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans min-h-screen flex flex-col">
+
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex">
+                    <div class="flex-shrink-0 flex items-center gap-2">
+                        <i data-lucide="layers" class="h-6 w-6 text-primary"></i>
+                        <span class="font-bold text-xl tracking-tight text-gray-900">AIProdGen</span>
+                    </div>
+                </div>
+                <div class="flex items-center">
+                    <a id="backBtn" href="/dashboard.html" class="btn btn-secondary text-sm">
+                        <i data-lucide="arrow-left" class="w-4 h-4 mr-2"></i> Back to Workspace
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900 flex items-center gap-3">
+                <div class="bg-blue-100 p-2 rounded-lg text-primary">
+                    <i data-lucide="target" class="w-6 h-6"></i>
+                </div>
+                Campaign Blueprint
+            </h1>
+            <p class="mt-2 text-sm text-gray-500">Generate strategic campaign hypotheses before diving into production.</p>
+        </div>
+
+        <!-- STAGE 1: Configuration -->
+        <div id="stage-config">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Left: Packs -->
+                <div class="lg:col-span-2">
+                    <h2 class="text-lg font-semibold text-gray-900 mb-4">Select Blueprint Strategy</h2>
+                    <div id="packsGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="col-span-full py-12 text-center text-gray-500">
+                            <i data-lucide="loader-2" class="w-8 h-8 animate-spin mx-auto mb-2 text-primary"></i>
+                            Loading strategies...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Settings & Review Before Production -->
+                <div class="lg:col-span-1">
+                    <div class="card p-6 sticky top-24">
+                        <h3 class="text-base font-semibold text-gray-900 mb-4 border-b border-gray-100 pb-2">Review Blueprint</h3>
+                        
+                        <div class="bg-gray-50 p-4 rounded-lg mb-6 border border-gray-200">
+                            <div id="packDetailsEmpty" class="text-sm text-gray-500 italic">Select a strategy to review details.</div>
+                            <div id="packDetails" class="hidden">
+                                <p id="packName" class="font-bold text-gray-900 mb-2"></p>
+                                
+                                <div class="grid grid-cols-2 gap-4 mb-4 text-sm">
+                                    <div class="bg-white p-3 rounded border border-gray-200 shadow-sm">
+                                        <p class="text-xs text-gray-500 font-medium">Estimated Time</p>
+                                        <p id="packTime" class="font-semibold text-gray-900 mt-1"></p>
+                                    </div>
+                                    <div class="bg-white p-3 rounded border border-gray-200 shadow-sm">
+                                        <p class="text-xs text-gray-500 font-medium">Output Cost</p>
+                                        <p id="packCost" class="font-semibold text-gray-900 mt-1"></p>
+                                    </div>
+                                </div>
+                                
+                                <p class="text-xs font-semibold text-gray-900 mb-2">Deliverables:</p>
+                                <div class="flex items-center text-xs text-gray-600 mb-1">
+                                    <i data-lucide="file-text" class="w-4 h-4 mr-2 text-primary"></i> <span id="packHypothesesCount">4</span> Strategic Hypotheses
+                                </div>
+                            </div>
+                        </div>
+
+                        <button id="startProductionBtn" disabled class="w-full btn btn-primary py-3 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i data-lucide="play" class="w-4 h-4 mr-2"></i> Generate Blueprint
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STAGE 2: Processing (Polling) -->
+        <div id="stage-processing" class="hidden text-center py-24 bg-white rounded-xl border border-gray-200 shadow-sm">
+            <div class="relative w-24 h-24 mx-auto mb-6">
+                <!-- Outer spinning ring -->
+                <div class="absolute inset-0 rounded-full border-4 border-blue-100"></div>
+                <div class="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
+                <!-- Inner icon -->
+                <div class="absolute inset-0 flex items-center justify-center text-primary">
+                    <i data-lucide="target" class="w-8 h-8"></i>
+                </div>
+            </div>
+            <h2 class="text-2xl font-bold text-gray-900 mb-2">Architecting Campaign Blueprint...</h2>
+            <p id="processingStatus" class="text-sm text-gray-500 max-w-md mx-auto">
+                Formulating hypotheses, targeting audiences, and crafting copy. Please wait.
+            </p>
+        </div>
+
+        <!-- STAGE 3: Campaign Review -->
+        <div id="stage-completed" class="hidden">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-900">Campaign Review</h2>
+                    <p class="text-sm text-gray-500">Review the generated hypotheses and select which ones to push to Campaign Production.</p>
+                </div>
+                <div class="flex gap-2 w-full md:w-auto">
+                    <button id="selectAllBtn" class="btn btn-secondary text-sm">
+                        Select All
+                    </button>
+                    <button id="produceConceptsBtn" class="btn btn-primary" disabled>
+                        <i data-lucide="layers" class="w-4 h-4 mr-2"></i> Produce Selected (<span id="selectedCount">0</span>)
+                    </button>
+                </div>
+            </div>
+
+            <div id="resultsGrid" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 gap-6">
+                <!-- Rendered by JS -->
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        lucide.createIcons();
+        const token = localStorage.getItem('token');
+        if (!token) window.location.href = '/login.html';
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const productId = urlParams.get('product_id');
+        
+        if (!productId) {
+            alert('No product ID specified');
+            window.location.href = '/dashboard.html';
+        }
+
+        document.getElementById('backBtn').href = `/product.html?id=${productId}`;
+
+        let availablePacks = [];
+        let selectedPackId = null;
+        let pollInterval = null;
+        let productContext = {};
+        
+        // Track selected concepts for production
+        let selectedConcepts = new Set();
+        let currentCollectionId = null;
+
+        // Fetch Product Context
+        async function fetchProduct() {
+            try {
+                const res = await fetch(`/api/products/${productId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    productContext = {
+                        brand: data.brand || '',
+                        category: data.category || '',
+                        usp: data.usp || '',
+                        audience: data.audience || ''
+                    };
+                }
+            } catch (e) {
+                console.error('Failed to fetch product context');
+            }
+        }
+
+        // Fetch Packs on load
+        async function fetchPacks() {
+            try {
+                const res = await fetch('/api/engines/campaign_blueprint/packs', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) throw new Error('Failed to fetch packs');
+                availablePacks = await res.json();
+                renderPacksGrid();
+            } catch (e) {
+                console.error(e);
+                alert('Error loading packs');
+            }
+        }
+
+        function renderPacksGrid() {
+            const grid = document.getElementById('packsGrid');
+            grid.innerHTML = availablePacks.map(pack => `
+                <div onclick="selectPack('${pack.id}')" id="pack-card-${pack.id}" class="pack-card group h-full flex flex-col">
+                    <div class="absolute top-4 right-4 text-gray-300 group-hover:text-primary transition-colors">
+                        <i data-lucide="check-circle-2" class="w-6 h-6 ${selectedPackId === pack.id ? 'text-primary' : 'hidden'} select-icon"></i>
+                        <div class="${selectedPackId === pack.id ? 'hidden' : 'block'} w-6 h-6 rounded-full border-2 border-current select-ring"></div>
+                    </div>
+                    <h3 class="text-lg font-bold text-gray-900 mb-1 pr-8">${pack.title}</h3>
+                    <p class="text-sm text-gray-500 mb-4 flex-grow">${pack.description}</p>
+                    <div class="flex items-center text-xs font-medium text-gray-700 bg-gray-100 inline-flex px-3 py-1.5 rounded w-fit">
+                        <i data-lucide="layers" class="w-3.5 h-3.5 mr-1.5"></i> ${pack.outputs} Hypotheses
+                    </div>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function selectPack(packId) {
+            selectedPackId = packId;
+            const pack = availablePacks.find(p => p.id === packId);
+            
+            document.querySelectorAll('.pack-card').forEach(el => el.classList.remove('selected'));
+            document.querySelectorAll('.select-icon').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.select-ring').forEach(el => el.classList.remove('hidden'));
+            
+            const selectedEl = document.getElementById(`pack-card-${packId}`);
+            if (selectedEl) {
+                selectedEl.classList.add('selected');
+                selectedEl.querySelector('.select-icon').classList.remove('hidden');
+                selectedEl.querySelector('.select-ring').classList.add('hidden');
+            }
+
+            document.getElementById('packDetailsEmpty').classList.add('hidden');
+            document.getElementById('packDetails').classList.remove('hidden');
+            document.getElementById('packName').textContent = pack.title;
+            document.getElementById('packTime').textContent = pack.estimated_time;
+            document.getElementById('packCost').textContent = `${pack.cost} Credits`;
+            
+            document.getElementById('startProductionBtn').disabled = false;
+        }
+
+        document.getElementById('startProductionBtn').addEventListener('click', async () => {
+            document.getElementById('stage-config').classList.add('hidden');
+            document.getElementById('stage-processing').classList.remove('hidden');
+
+            try {
+                const res = await fetch(`/api/products/${productId}/jobs/campaign_blueprint`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ 
+                        packId: selectedPackId, 
+                        productContext: productContext 
+                    })
+                });
+                
+                if (!res.ok) throw new Error('Failed to start blueprint');
+                const collection = await res.json();
+                
+                startPolling(collection.id);
+            } catch (e) {
+                console.error(e);
+                alert('Error starting blueprint run');
+                document.getElementById('stage-config').classList.remove('hidden');
+                document.getElementById('stage-processing').classList.add('hidden');
+            }
+        });
+
+        function startPolling(collectionId) {
+            pollInterval = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api/collections/${collectionId}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    const collection = await res.json();
+                    
+                    if (collection.status === 'completed' || collection.status === 'failed') {
+                        clearInterval(pollInterval);
+                        if (collection.status === 'completed') {
+                            currentCollectionId = collection.id;
+                            showResults(collection);
+                        } else {
+                            alert('Job failed during execution.');
+                            document.getElementById('stage-config').classList.remove('hidden');
+                            document.getElementById('stage-processing').classList.add('hidden');
+                        }
+                    } else if (collection.status === 'running') {
+                        document.getElementById('processingStatus').textContent = `Architecting... Generated ${collection.outputs ? collection.outputs.length : 0} hypotheses so far.`;
+                    }
+                } catch (e) {
+                    console.error('Polling error:', e);
+                }
+            }, 3000);
+        }
+
+        // Toggle concept selection
+        window.toggleConcept = function(conceptId) {
+            const el = document.getElementById(`concept-${conceptId}`);
+            const checkIcon = document.getElementById(`check-${conceptId}`);
+            const ringIcon = document.getElementById(`ring-${conceptId}`);
+            
+            if (selectedConcepts.has(conceptId)) {
+                selectedConcepts.delete(conceptId);
+                el.classList.remove('selected');
+                checkIcon.classList.add('hidden');
+                ringIcon.classList.remove('hidden');
+            } else {
+                selectedConcepts.add(conceptId);
+                el.classList.add('selected');
+                checkIcon.classList.remove('hidden');
+                ringIcon.classList.add('hidden');
+            }
+            
+            updateProduceButton();
+        };
+
+        document.getElementById('selectAllBtn').addEventListener('click', () => {
+            const allConceptEls = document.querySelectorAll('.concept-card');
+            if (selectedConcepts.size === allConceptEls.length) {
+                // Deselect all
+                selectedConcepts.clear();
+                allConceptEls.forEach(el => {
+                    el.classList.remove('selected');
+                    const id = el.id.replace('concept-', '');
+                    document.getElementById(`check-${id}`).classList.add('hidden');
+                    document.getElementById(`ring-${id}`).classList.remove('hidden');
+                });
+            } else {
+                // Select all
+                allConceptEls.forEach(el => {
+                    const id = el.id.replace('concept-', '');
+                    selectedConcepts.add(id);
+                    el.classList.add('selected');
+                    document.getElementById(`check-${id}`).classList.remove('hidden');
+                    document.getElementById(`ring-${id}`).classList.add('hidden');
+                });
+            }
+            updateProduceButton();
+        });
+
+        function updateProduceButton() {
+            const btn = document.getElementById('produceConceptsBtn');
+            const count = document.getElementById('selectedCount');
+            count.textContent = selectedConcepts.size;
+            
+            if (selectedConcepts.size > 0) {
+                btn.disabled = false;
+            } else {
+                btn.disabled = true;
+            }
+        }
+
+        document.getElementById('produceConceptsBtn').addEventListener('click', () => {
+            if (selectedConcepts.size === 0) return;
+            // Go to production queue passing the selected concepts
+            const ids = Array.from(selectedConcepts).join(',');
+            window.location.href = `/production.html?product_id=${productId}&blueprint_id=${currentCollectionId}&concepts=${ids}`;
+        });
+
+        function safe(val) {
+            return val ? val : '-';
+        }
+
+        function showResults(collection) {
+            document.getElementById('stage-processing').classList.add('hidden');
+            document.getElementById('stage-completed').classList.remove('hidden');
+
+            const grid = document.getElementById('resultsGrid');
+            grid.innerHTML = collection.outputs.filter(o => o.type === 'blueprint_json').map(output => {
+                const rawJson = output.metadata && output.metadata.content ? output.metadata.content : '{}';
+                const cleanedJson = rawJson.replace(/```json/g, '').replace(/```/g, '').trim();
+                
+                let p = {};
+                try {
+                    p = JSON.parse(cleanedJson);
+                } catch (e) {
+                    console.error("Failed to parse blueprint JSON:", e);
+                }
+
+                return `
+                <div id="concept-${output.id}" onclick="toggleConcept('${output.id}')" class="concept-card cursor-pointer group">
+                    <div class="absolute top-4 right-4 text-gray-300 group-hover:text-primary transition-colors z-10">
+                        <i id="check-${output.id}" data-lucide="check-circle-2" class="w-6 h-6 hidden text-primary"></i>
+                        <div id="ring-${output.id}" class="w-6 h-6 rounded-full border-2 border-current"></div>
+                    </div>
+                    
+                    <div class="flex items-center mb-4 pr-10">
+                        <div class="bg-primary/10 text-primary p-2 rounded mr-3">
+                            <i data-lucide="lightbulb" class="w-5 h-5"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-900">${safe(p.Name || output.format)}</h3>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div>
+                            <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Performance First</h4>
+                            <div class="bg-gray-50 p-3 rounded border border-gray-100">
+                                <p class="text-sm font-semibold text-gray-800 mb-1">Hypothesis</p>
+                                <p class="text-sm text-gray-600">${safe(p.Hypothesis)}</p>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="bg-gray-50 p-3 rounded border border-gray-100">
+                                <p class="text-xs text-gray-500 mb-1">Audience</p>
+                                <p class="text-sm font-medium text-gray-800">${safe(p.Audience)}</p>
+                            </div>
+                            <div class="bg-gray-50 p-3 rounded border border-gray-100">
+                                <p class="text-xs text-gray-500 mb-1">Hook</p>
+                                <p class="text-sm font-medium text-gray-800">${safe(p.Hook)}</p>
+                            </div>
+                            <div class="bg-gray-50 p-3 rounded border border-gray-100 col-span-2">
+                                <p class="text-xs text-gray-500 mb-1">Offer</p>
+                                <p class="text-sm font-medium text-gray-800">${safe(p.Offer)}</p>
+                            </div>
+                        </div>
+
+                        <div class="border-t border-gray-100 pt-3 space-y-3">
+                            <div>
+                                <p class="text-sm font-semibold text-gray-800">Expected Outcome</p>
+                                <p class="text-sm text-gray-600">${safe(p.ExpectedOutcome)}</p>
+                            </div>
+                            <div>
+                                <p class="text-sm font-semibold text-gray-800">Why It Should Work</p>
+                                <p class="text-sm text-gray-600">${safe(p.WhyItShouldWork)}</p>
+                            </div>
+                            <div>
+                                <p class="text-sm font-semibold text-gray-800">When To Use</p>
+                                <p class="text-sm text-gray-600">${safe(p.WhenToUse)}</p>
+                            </div>
+                        </div>
+
+                        <div class="border-t border-gray-100 pt-3">
+                            <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Visual Direction</h4>
+                            <p class="text-sm text-gray-800 italic">"${safe(p.VisualDirection)}"</p>
+                        </div>
+
+                        <div class="border-t border-gray-100 pt-3">
+                            <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Copy</h4>
+                            <div class="bg-blue-50/50 p-3 rounded border border-blue-100 space-y-2">
+                                <div>
+                                    <span class="text-xs text-blue-500 font-semibold">Headline</span>
+                                    <p class="text-sm text-gray-800 font-bold">${safe(p.Headline)}</p>
+                                </div>
+                                <div>
+                                    <span class="text-xs text-blue-500 font-semibold">Primary Text</span>
+                                    <p class="text-sm text-gray-700">${safe(p.PrimaryText)}</p>
+                                </div>
+                                <div>
+                                    <span class="text-xs text-blue-500 font-semibold">CTA</span>
+                                    <p class="text-sm text-gray-800 font-medium">${safe(p.CTA)}</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="pt-2 border-t border-gray-100 flex justify-between text-xs text-gray-500">
+                            <span class="flex items-center"><i data-lucide="image" class="w-3 h-3 mr-1"></i> Generates 5 Assets</span>
+                            <span class="flex items-center"><i data-lucide="clock" class="w-3 h-3 mr-1"></i> ~2 mins</span>
+                        </div>
+                    </div>
+                </div>
+                `;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        fetchProduct().then(() => fetchPacks());
+    </script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+/* public/components/stepper.css */
+@layer components {
+  .stepper {
+    @apply flex items-center justify-between w-full relative;
+  }
+  .stepper-line {
+    @apply absolute top-1/2 left-0 w-full h-0.5 bg-gray-200 -z-10 transform -translate-y-1/2;
+  }
+  .stepper-line-active {
+    @apply absolute top-1/2 left-0 h-0.5 bg-primary -z-10 transform -translate-y-1/2 transition-all duration-300;
+  }
+  .step-item {
+    @apply flex flex-col items-center relative z-10 bg-white px-2;
+  }
+  .step-circle {
+    @apply w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium border-2 transition-colors;
+  }
+  .step-circle-pending {
+    @apply bg-white border-gray-300 text-gray-500;
+  }
+  .step-circle-active {
+    @apply bg-white border-primary text-primary;
+  }
+  .step-circle-completed {
+    @apply bg-primary border-primary text-white;
+  }
+  .step-label {
+    @apply mt-2 text-xs font-medium text-gray-500 text-center;
+  }
+  .step-label-active {
+    @apply text-primary;
+  }
+}

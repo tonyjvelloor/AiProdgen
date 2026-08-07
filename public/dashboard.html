@@ -1,360 +1,401 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
-
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - Aiprodgen</title>
-    <!-- Auth Check -->
-    <script>
-        (async function () {
-            const token = localStorage.getItem('token');
-            if (!token) {
-                window.location.replace('/login.html');
-                return;
-            }
-            try {
-                const res = await fetch('/api/auth/verify', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
-                });
-                if (!res.ok) throw new Error('Auth failed');
-                const data = await res.json();
-                if (!data.valid) {
-                    localStorage.removeItem('token');
-                    window.location.replace('/login.html');
-                }
-            } catch (e) {
-                console.error(e);
-            }
-        })();
-    </script>
+    <title>AIProdGen - Workspace</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="/index.css">
-    
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
-        rel="stylesheet">
-    <!-- Meta Pixel (Copied from app.html) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
     <script>
-        !function (f, b, e, v, n, t, s) {
-            if (f.fbq) return; n = f.fbq = function () {
-                n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments)
-            };
-            if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
-            n.queue = []; t = b.createElement(e); t.async = !0;
-            t.src = v; s = b.getElementsByTagName(e)[0];
-            s.parentNode.insertBefore(t, s)
-        }(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
-        fbq('init', '4190907814571632');
-        fbq('track', 'PageView');
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#2563eb',
+                        secondary: '#1e40af',
+                    }
+                }
+            }
+        }
     </script>
-    <style>
-        /* Component specific styles not in index.css */
-        .sidebar-link {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 0.75rem 1rem;
-            border-radius: 0.75rem;
-            color: var(--text-muted);
-            transition: all var(--transition-fast);
-            margin-bottom: 0.25rem;
-        }
-
-        .sidebar-link:hover {
-            color: var(--text-main);
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        .sidebar-link.active {
-            background: rgba(99, 102, 241, 0.1);
-            color: var(--brand-primary);
-        }
-
-        .tool-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-subtle);
-            border-radius: 1.5rem;
-            padding: 1rem;
-            transition: all var(--transition-smooth);
-            cursor: pointer;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .tool-card:hover {
-            border-color: var(--brand-primary);
-            transform: translateY(-4px);
-        }
-
-        .tool-card:hover .tool-bg {
-            transform: scale(1.05);
+    <style type="text/tailwindcss">
+        @layer components {
+            .btn { @apply inline-flex justify-center items-center rounded-md border border-transparent px-4 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors cursor-pointer; }
+            .btn-primary { @apply bg-primary text-white hover:bg-blue-600 focus:ring-primary; }
+            .btn-secondary { @apply bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-primary; }
+            .card { @apply bg-white overflow-hidden shadow-sm rounded-xl border border-gray-200 transition-all hover:shadow-md hover:border-blue-300; }
         }
     </style>
 </head>
+<body class="bg-gray-50 font-sans min-h-screen flex flex-col">
 
-<body class="dashboard-layout">
-
-    <!-- Sidebar -->
-    <aside class="sidebar">
-        <!-- Logo -->
-        <div style="padding-bottom: var(--space-md);">
-            <div class="flex items-center gap-sm">
-                <div style="width: 32px; height: 32px; background: var(--gradient-brand); border-radius: 8px;"></div>
-                <span style="font-size: 1.25rem; font-weight: 700; color: white;">Aiprodgen</span>
-            </div>
-        </div>
-
-        <!-- Navigation -->
-        <nav class="flex-1 px-4 space-y-2 overflow-y-auto">
-            <p class="px-4 text-xs font-semibold text-muted uppercase tracking-wider mb-2 mt-4">Create</p>
-            <a href="#" class="sidebar-link active">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z">
-                    </path>
-                </svg>
-                <span>Dashboard</span>
-            </a>
-            <a href="/ugc.html" class="sidebar-link">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z">
-                    </path>
-                </svg>
-                <span>UGC Studio</span>
-            </a>
-            <a href="/app.html" class="sidebar-link">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z">
-                    </path>
-                </svg>
-                <span>Product Photos</span>
-            </a>
-
-            <p class="px-4 text-xs font-semibold text-muted uppercase tracking-wider mb-2 mt-6">Community</p>
-            <a href="/wall.html" class="sidebar-link">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10">
-                    </path>
-                </svg>
-                <span>Showcase Wall</span>
-            </a>
-            <a href="#" class="sidebar-link">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z">
-                    </path>
-                </svg>
-                <span>Liked Items</span>
-            </a>
-        </nav>
-
-        <!-- User Profile Stub -->
-        <div style="margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--border-subtle);">
-            <div class="flex items-center gap-sm" style="padding: 0.5rem; border-radius: 0.5rem; cursor: pointer;">
-                <div style="width: 40px; height: 40px; border-radius: 50%; background: var(--brand-primary); display: flex; align-items: center; justify-content: center; font-weight: bold; color: white;" id="userAvatar">U</div>
-                <div style="flex: 1; overflow: hidden;">
-                    <p style="font-size: 0.875rem; font-weight: 500; color: white; margin: 0;" id="userName">User</p>
-                    <p style="font-size: 0.75rem; color: var(--brand-primary); margin: 0;" id="creditBalance">Loading credits...</p>
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex">
+                    <div class="flex-shrink-0 flex items-center gap-2">
+                        <i data-lucide="layers" class="h-6 w-6 text-primary"></i>
+                        <span class="font-bold text-xl tracking-tight text-gray-900">AIProdGen</span>
+                    </div>
+                    <div class="hidden sm:ml-8 sm:flex sm:space-x-8">
+                        <a href="/dashboard.html" class="border-primary text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Workspace</a>
+                        <a href="/content-library.html" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Content Library</a>
+                        <a href="/creations.html" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Legacy Hub</a>
+                    </div>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div class="text-sm text-gray-600 hidden sm:block">
+                        Workspace: <span id="workspaceName" class="font-medium text-gray-900">Loading...</span>
+                    </div>
+                    <a href="/pricing.html" class="btn btn-secondary text-xs">Upgrade Plan</a>
+                    <a href="/admin.html" class="text-gray-400 hover:text-gray-500"><i data-lucide="settings" class="h-5 w-5"></i></a>
+                    <button id="logoutBtn" class="text-gray-400 hover:text-red-500"><i data-lucide="log-out" class="h-5 w-5"></i></button>
                 </div>
             </div>
         </div>
-    </aside>
+    </nav>
 
     <!-- Main Content -->
-    <main class="main-content">
-        <!-- Top Bar -->
-        <header
-            class="h-16 flex items-center justify-between px-8 border-b border-dark-700 bg-dark-900/50 backdrop-blur z-10">
-            <h1 class="text-xl font-bold text-white">Let's create something magic ✨</h1>
-            <div class="flex items-center space-x-4">
-                <button
-                    class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors shadow-lg shadow-brand-600/20"
-                    onclick="window.location.href='/app.html#buy'">
-                    ⚡ Upgrade Plan
-                </button>
-            </div>
-        </header>
-
-        <!-- Scrollable Content -->
-        <div class="flex-1 overflow-y-auto p-8 relative">
-            <!-- Background Blob -->
-            <div
-                class="absolute top-0 right-0 w-[500px] h-[500px] bg-brand-600/10 rounded-full blur-[100px] -z-10 pointer-events-none">
-            </div>
-
-            <!-- Tools Grid -->
-            <div class="mb-10">
-                <h2 class="text-lg font-semibold text-muted mb-6 flex items-center gap-2">
-                    <svg class="w-5 h-5 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z">
-                        </path>
-                    </svg>
-                    AI Tools
-                </h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-
-                    <!-- Video Generator -->
-                    <div class="tool-card group" onclick="window.location.href='/ugc.html'">
-                        <div class="aspect-video bg-gray-800 rounded-xl mb-4 overflow-hidden relative">
-                            <img src="https://storage.googleapis.com/download/storage/v1/b/b2b-pro-414806.appspot.com/o/admin_login_verification_1768761503540.webp?generation=1708283920556209&alt=media"
-                                class="w-full h-full object-cover opacity-60 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500 tool-bg"
-                                alt="UGC Video">
-                            <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent">
-                            </div>
-                            <div class="absolute bottom-2 left-3">
-                                <span
-                                    class="text-xs font-bold bg-white/20 backdrop-blur px-2 py-1 rounded text-white">NEW</span>
-                            </div>
-                        </div>
-                        <h3 class="font-bold text-white mb-1">UGC Video Ad</h3>
-                        <p class="text-xs text-muted">Turn scripts into viral video ads with AI avatars.</p>
-                    </div>
-
-                    <!-- Product Photo -->
-                    <div class="tool-card group" onclick="window.location.href='/app.html'">
-                        <div class="aspect-video bg-gray-800 rounded-xl mb-4 overflow-hidden relative">
-                            <div
-                                class="w-full h-full bg-gradient-to-br from-indigo-900 to-purple-900 group-hover:scale-105 transition-transform duration-500 tool-bg flex items-center justify-center">
-                                <span class="text-4xl">📸</span>
-                            </div>
-                            <div class="absolute bottom-2 left-3">
-                                <span
-                                    class="text-xs font-bold bg-white/20 backdrop-blur px-2 py-1 rounded text-white">POPULAR</span>
-                            </div>
-                        </div>
-                        <h3 class="font-bold text-white mb-1">Professional Photoshoot</h3>
-                        <p class="text-xs text-muted">Generate studio-quality product shots in seconds.</p>
-                    </div>
-
-                    <!-- Community -->
-                    <div class="tool-card group" onclick="window.location.href='/wall.html'">
-                        <div class="aspect-video bg-gray-800 rounded-xl mb-4 overflow-hidden relative">
-                            <div
-                                class="w-full h-full bg-gradient-to-br from-emerald-900 to-teal-900 group-hover:scale-105 transition-transform duration-500 tool-bg flex items-center justify-center">
-                                <span class="text-4xl">🌍</span>
-                            </div>
-                        </div>
-                        <h3 class="font-bold text-white mb-1">Inspiration Wall</h3>
-                        <p class="text-xs text-muted">See what others are creating and remix styles.</p>
-                    </div>
-
-                    <!-- Coming Soon: Character -->
-                    <div class="tool-card group opacity-60">
-                        <div
-                            class="aspect-video bg-gray-900 rounded-xl mb-4 overflow-hidden relative border border-dashed border-gray-700 flex items-center justify-center">
-                            <span class="text-muted text-sm font-medium">Coming Soon</span>
-                        </div>
-                        <h3 class="font-bold text-muted mb-1">Character Lab</h3>
-                        <p class="text-xs text-muted">Train consistent AI characters for your brand.</p>
-                    </div>
-
-                </div>
-            </div>
-
-            <!-- Recent Generations -->
+    <main class="flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <div class="flex justify-between items-end mb-8">
             <div>
-                <h2 class="text-lg font-semibold text-muted mb-6 flex items-center gap-2">
-                    <svg class="w-5 h-5 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                    Recent History
-                </h2>
-                <div class="glass-panel rounded-2xl p-6 text-center text-muted relative overflow-hidden"
-                    id="recentHistoryContainer">
-                    <div class="absolute inset-0 flex items-center justify-center z-10" id="emptyHistoryMsg">
-                        <div class="text-center">
-                            <p class="mb-3">No recent history found</p>
-                            <button
-                                class="px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-sm text-white transition-colors"
-                                onclick="window.location.href='/app.html'">Start Creating</button>
-                        </div>
-                    </div>
-                    <!-- Items will be injected here JS -->
-                    <div class="h-32"></div>
-                </div>
+                <h1 class="text-3xl font-bold text-gray-900">Products</h1>
+                <p class="mt-2 text-sm text-gray-500">Manage your product catalog and generate marketing assets.</p>
             </div>
+            <button onclick="openModal()" class="btn btn-primary gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i> Add Product
+            </button>
+        </div>
 
-            <footer class="mt-12 text-center text-xs text-muted pb-8">
-                &copy; 2026 Aiprodgen. All rights reserved.
-            </footer>
+        <div id="loadingProducts" class="flex justify-center py-12">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+
+        <!-- Products Grid -->
+        <div id="productsGrid" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <!-- Rendered via JS -->
+        </div>
+
+        <div id="emptyState" class="hidden text-center py-24 bg-white rounded-xl border border-dashed border-gray-300">
+            <div class="mx-auto h-12 w-12 text-gray-400 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                <i data-lucide="package" class="h-6 w-6"></i>
+            </div>
+            <h3 class="text-lg font-medium text-gray-900">No products yet</h3>
+            <p class="mt-1 text-sm text-gray-500 mb-6">Get started by adding your first product.</p>
+            <button onclick="openModal()" class="btn btn-primary gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i> Add Product
+            </button>
         </div>
     </main>
 
+    <!-- Add Product Modal -->
+    <div id="addProductModal" class="fixed inset-0 z-50 hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onclick="closeModal()"></div>
+        <div class="fixed inset-0 z-10 overflow-y-auto">
+            <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+                <div class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-xl">
+                    <div class="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+                        <div class="sm:flex sm:items-start">
+                            <div class="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left w-full">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h3 class="text-lg font-semibold leading-6 text-gray-900" id="modal-title">Add New Product</h3>
+                                    <button onclick="closeModal()" class="text-gray-400 hover:text-gray-500"><i data-lucide="x" class="w-5 h-5"></i></button>
+                                </div>
+                                
+                                <!-- Step 1: Choose Entry Point -->
+                                <div id="modalStep1">
+                                    <p class="text-sm text-gray-500 mb-4">How would you like to start?</p>
+                                    <div class="space-y-3">
+                                        <button onclick="selectEntryPoint('generate')" class="w-full text-left px-4 py-4 border border-gray-200 rounded-lg hover:border-primary hover:bg-blue-50 transition-colors flex items-center gap-4 group">
+                                            <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
+                                                <i data-lucide="camera" class="w-5 h-5"></i>
+                                            </div>
+                                            <div>
+                                                <h4 class="text-sm font-semibold text-gray-900">Generate Product Photography</h4>
+                                                <p class="text-xs text-gray-500">Best for products with simple/raw photos.</p>
+                                            </div>
+                                        </button>
+                                        
+                                        <button onclick="selectEntryPoint('upload')" class="w-full text-left px-4 py-4 border border-gray-200 rounded-lg hover:border-primary hover:bg-blue-50 transition-colors flex items-center gap-4 group">
+                                            <div class="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
+                                                <i data-lucide="image" class="w-5 h-5"></i>
+                                            </div>
+                                            <div>
+                                                <h4 class="text-sm font-semibold text-gray-900">I Already Have Product Images</h4>
+                                                <p class="text-xs text-gray-500">Upload existing studio/lifestyle images.</p>
+                                            </div>
+                                        </button>
+
+                                        <button onclick="selectEntryPoint('quick')" class="w-full text-left px-4 py-4 border border-gray-200 rounded-lg hover:border-primary hover:bg-blue-50 transition-colors flex items-center gap-4 group">
+                                            <div class="w-10 h-10 rounded-full bg-yellow-100 text-yellow-600 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
+                                                <i data-lucide="zap" class="w-5 h-5"></i>
+                                            </div>
+                                            <div>
+                                                <h4 class="text-sm font-semibold text-gray-900">Quick Project</h4>
+                                                <p class="text-xs text-gray-500">Generate one business asset without full setup.</p>
+                                            </div>
+                                        </button>
+
+                                        <button onclick="selectEntryPoint('clone')" class="w-full text-left px-4 py-4 border border-gray-200 rounded-lg hover:border-primary hover:bg-blue-50 transition-colors flex items-center gap-4 group">
+                                            <div class="w-10 h-10 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
+                                                <i data-lucide="copy" class="w-5 h-5"></i>
+                                            </div>
+                                            <div>
+                                                <h4 class="text-sm font-semibold text-gray-900">Clone Existing Product</h4>
+                                                <p class="text-xs text-gray-500">For brands with multiple color variants or similar SKUs.</p>
+                                            </div>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Step 2: Upload Form (Only 'upload' is fully supported right now) -->
+                                <div id="modalStep2" class="hidden">
+                                    <button onclick="backToStep1()" class="text-sm text-gray-500 hover:text-gray-900 mb-4 inline-flex items-center gap-1">
+                                        <i data-lucide="arrow-left" class="w-4 h-4"></i> Back
+                                    </button>
+                                    <div class="mt-2 space-y-4">
+                                        <div>
+                                            <label for="productName" class="block text-sm font-medium leading-6 text-gray-900 text-left">Product Name</label>
+                                            <div class="mt-1">
+                                                <input type="text" id="productName" class="block w-full rounded-md border-0 py-2 px-3 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6" placeholder="e.g. Nike Air Zoom">
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label for="productCategory" class="block text-sm font-medium leading-6 text-gray-900 text-left">Category</label>
+                                            <div class="mt-1">
+                                                <input type="text" id="productCategory" class="block w-full rounded-md border-0 py-2 px-3 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6" placeholder="e.g. Running Shoes">
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium leading-6 text-gray-900 text-left">Product Image (Primary Output)</label>
+                                            <div class="mt-1 flex justify-center rounded-lg border border-dashed border-gray-900/25 px-6 py-10 hover:border-primary transition-colors bg-gray-50" id="dropZone">
+                                                <div class="text-center">
+                                                    <i data-lucide="image" class="mx-auto h-12 w-12 text-gray-300"></i>
+                                                    <div class="mt-4 flex text-sm leading-6 text-gray-600 justify-center">
+                                                        <label for="fileUpload" class="relative cursor-pointer rounded-md font-semibold text-primary focus-within:outline-none focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 hover:text-blue-500">
+                                                            <span>Upload a file</span>
+                                                            <input id="fileUpload" name="fileUpload" type="file" class="sr-only" accept="image/jpeg,image/png,image/webp">
+                                                        </label>
+                                                        <p class="pl-1">or drag and drop</p>
+                                                    </div>
+                                                    <p class="text-xs leading-5 text-gray-600">PNG, JPG, WEBP up to 5MB</p>
+                                                </div>
+                                            </div>
+                                            <div id="imagePreviewContainer" class="hidden mt-2 relative">
+                                                <img id="imagePreview" src="" class="w-full h-48 object-cover rounded-lg border border-gray-200">
+                                                <button onclick="clearImage()" class="absolute top-2 right-2 p-1 bg-white rounded-full text-red-500 hover:bg-red-50 shadow">
+                                                    <i data-lucide="x" class="w-4 h-4"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-6 flex justify-end gap-3">
+                                        <button type="button" class="btn btn-secondary" onclick="closeModal()">
+                                            Cancel
+                                        </button>
+                                        <button type="button" id="createProductBtn" class="btn btn-primary" onclick="createProduct()">
+                                            Create Product
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
-        // Data Loading
-        async function loadUserData() {
+        lucide.createIcons();
+        const token = localStorage.getItem('token');
+        let currentBase64Image = null;
+
+        if (!token) {
+            window.location.href = '/login.html';
+        }
+
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            localStorage.removeItem('token');
+            window.location.href = '/login.html';
+        });
+
+        // Modal Logic
+        function openModal() {
+            document.getElementById('addProductModal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('addProductModal').classList.add('hidden');
+            document.getElementById('productName').value = '';
+            document.getElementById('productCategory').value = '';
+            clearImage();
+            backToStep1();
+        }
+
+        function selectEntryPoint(type) {
+            if (type !== 'upload') {
+                alert('This entry point is coming soon. For now, please use "I Already Have Product Images".');
+                return;
+            }
+            document.getElementById('modalStep1').classList.add('hidden');
+            document.getElementById('modalStep2').classList.remove('hidden');
+        }
+
+        function backToStep1() {
+            document.getElementById('modalStep2').classList.add('hidden');
+            document.getElementById('modalStep1').classList.remove('hidden');
+        }
+
+        function clearImage() {
+            currentBase64Image = null;
+            document.getElementById('imagePreviewContainer').classList.add('hidden');
+            document.getElementById('dropZone').classList.remove('hidden');
+            document.getElementById('fileUpload').value = '';
+        }
+
+        document.getElementById('fileUpload').addEventListener('change', function(e) {
+            if (e.target.files && e.target.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    currentBase64Image = e.target.result;
+                    document.getElementById('imagePreview').src = currentBase64Image;
+                    document.getElementById('imagePreviewContainer').classList.remove('hidden');
+                    document.getElementById('dropZone').classList.add('hidden');
+                }
+                reader.readAsDataURL(e.target.files[0]);
+            }
+        });
+
+        async function loadWorkspace() {
             try {
-                const token = localStorage.getItem('token');
-                // 1. Get Profile/Credits
-                const res = await fetch('/api/credits/balance', {
+                // Load Workspace info
+                const wsRes = await fetch('/api/workspace', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                if (res.ok) {
-                    const data = await res.json();
-                    document.getElementById('creditBalance').textContent = `⚡ ${data.credits || 0} Credits`;
-                    // Mock user name retrieval if not in API, use email from localstorage
-                    const email = localStorage.getItem('userEmail') || 'User';
-                    document.getElementById('userName').textContent = email.split('@')[0];
-                    document.getElementById('userAvatar').textContent = email[0].toUpperCase();
+                if(wsRes.ok) {
+                    const ws = await wsRes.json();
+                    document.getElementById('workspaceName').textContent = ws.name;
                 }
 
-                // 2. Load Gallery (Latest 5) - reuse public endpoint or gallery endpoint
-                const galleryRes = await fetch('/api/ugc/gallery', {
+                // Load Products
+                const prodRes = await fetch('/api/products', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-
-                if (galleryRes.ok) {
-                    const galleryData = await galleryRes.json();
-                    if (galleryData.assets && galleryData.assets.length > 0) {
-                        renderRecentHistory(galleryData.assets.slice(0, 5));
+                
+                document.getElementById('loadingProducts').classList.add('hidden');
+                
+                if (prodRes.ok) {
+                    const products = await prodRes.json();
+                    renderProducts(products);
+                } else {
+                    if (prodRes.status === 401 || prodRes.status === 403) {
+                        window.location.href = '/login.html';
                     }
                 }
-
-            } catch (e) {
-                console.error("Failed to load user data", e);
-                document.getElementById('creditBalance').textContent = "⚠️ Error";
+            } catch (err) {
+                console.error('Error loading workspace', err);
             }
         }
 
-        function renderRecentHistory(assets) {
-            const container = document.getElementById('recentHistoryContainer');
-            const emptyMsg = document.getElementById('emptyHistoryMsg');
-            if (!assets.length) return;
+        function renderProducts(products) {
+            const grid = document.getElementById('productsGrid');
+            const emptyState = document.getElementById('emptyState');
+            
+            if (!products || products.length === 0) {
+                grid.classList.add('hidden');
+                emptyState.classList.remove('hidden');
+                return;
+            }
 
-            emptyMsg.classList.add('hidden');
-            container.innerHTML = '<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4"></div>';
-            const grid = container.firstElementChild;
+            emptyState.classList.add('hidden');
+            grid.classList.remove('hidden');
+            grid.innerHTML = '';
 
-            assets.forEach(asset => {
-                const el = document.createElement('div');
-                el.className = 'aspect-square rounded-lg bg-dark-800 overflow-hidden relative group cursor-pointer border border-dark-600 hover:border-brand-500 transition-colors';
-                const isVideo = asset.type === 'video' || asset.url.endsWith('.mp4');
-
-                let mediaHtml = '';
-                if (isVideo) {
-                    mediaHtml = `<video src="${asset.url}" class="w-full h-full object-cover" muted loop onmouseenter="this.play()" onmouseleave="this.pause()"></video>`;
-                } else {
-                    mediaHtml = `<img src="${asset.url}" class="w-full h-full object-cover">`;
+            products.forEach(product => {
+                // Find primary output image
+                let imageUrl = 'https://placehold.co/400x300?text=No+Image';
+                if (product.outputs && product.outputs.length > 0) {
+                    // It returns an array because it's a join, or an object if singular, check what supabase returned.
+                    // For outputs(storage_path), it's likely an array of related outputs. Wait, we selected outputs matching primary_output_id? No, the query was `outputs(storage_path)`.
+                    // Actually, if we want the primary output, we should probably just use the first output or fix the join.
+                    // For now, if outputs is an array:
+                    if(Array.isArray(product.outputs) && product.outputs.length > 0) {
+                        imageUrl = product.outputs[0].storage_path;
+                    } else if (product.outputs.storage_path) {
+                        imageUrl = product.outputs.storage_path;
+                    }
                 }
 
-                el.innerHTML = `
-                    ${mediaHtml}
-                    <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <p class="text-[10px] text-white truncate">${asset.prompt || 'Untitled'}</p>
+                const card = document.createElement('a');
+                card.href = `/product.html?id=${product.id}`;
+                card.className = "card block";
+                card.innerHTML = `
+                    <div class="h-48 w-full bg-gray-100 overflow-hidden border-b border-gray-100">
+                        <img src="${imageUrl}" alt="${product.name}" class="w-full h-full object-cover">
                     </div>
-                 `;
-                grid.appendChild(el);
+                    <div class="p-4">
+                        <h3 class="text-lg font-semibold text-gray-900">${product.name}</h3>
+                        <p class="text-sm text-gray-500 capitalize">${product.category || 'Uncategorized'}</p>
+                        <div class="mt-4 flex items-center justify-between">
+                            <span class="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20 capitalize">${product.status}</span>
+                            <span class="text-xs text-gray-400">${new Date(product.created_at).toLocaleDateString()}</span>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(card);
             });
         }
 
-        document.addEventListener('DOMContentLoaded', loadUserData);
+        async function createProduct() {
+            const btn = document.getElementById('createProductBtn');
+            const name = document.getElementById('productName').value;
+            const category = document.getElementById('productCategory').value;
+
+            if (!name || !currentBase64Image) {
+                alert('Please provide a name and upload an image.');
+                return;
+            }
+
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2 inline-block"></div> Creating...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/products', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        name, category, base64Image: currentBase64Image
+                    })
+                });
+
+                if (res.ok) {
+                    const product = await res.json();
+                    window.location.href = `/product.html?id=${product.id}`;
+                } else {
+                    const err = await res.json();
+                    alert('Failed to create product: ' + err.error);
+                }
+            } catch (err) {
+                console.error(err);
+                alert('An error occurred.');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        loadWorkspace();
     </script>
 </body>
-
 </html>

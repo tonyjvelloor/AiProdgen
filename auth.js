@@ -1,6 +1,9 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('./database');
+const Sentry = require('@sentry/node');
+const crypto = require('crypto');
+const emailService = require('./lib/email');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const SALT_ROUNDS = 10;
@@ -26,6 +29,14 @@ module.exports = {
         return await bcrypt.compare(password, hash);
     },
 
+    // Send Verification Email helper
+    sendVerificationFlow: async (user, email) => {
+        const token = crypto.randomBytes(32).toString('hex');
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 hours
+        await db.createVerificationToken(user.id, token, expiresAt);
+        await emailService.sendVerificationEmail(email, token);
+    },
+
     // Register new user after payment
     registerUser: async (email, paymentId, orderId, amountPaid = 0, currency = 'USD') => {
         // Check if email already exists
@@ -38,7 +49,8 @@ module.exports = {
         const passwordHash = await module.exports.hashPassword(password);
 
         // Create user
-        await db.createUser(email, passwordHash, paymentId, orderId, amountPaid, currency);
+        const user = await db.createUser(email, passwordHash, paymentId, orderId, amountPaid, currency);
+        await module.exports.sendVerificationFlow(user, email);
 
         return { email, password };
     },
@@ -53,7 +65,8 @@ module.exports = {
         const passwordHash = await module.exports.hashPassword(password);
 
         // Create user with null payment ID and 0 amount
-        await db.createUser(email, passwordHash, null, null, 0, 'USD');
+        const user = await db.createUser(email, passwordHash, null, null, 0, 'USD');
+        await module.exports.sendVerificationFlow(user, email);
 
         return { email };
     },
@@ -78,12 +91,16 @@ module.exports = {
 
         // Generate JWT token
         const token = jwt.sign(
-            { userId: user.id, email: user.email },
+            { 
+                userId: user.id, 
+                email: user.email,
+                verified: user.email_verified_at !== null 
+            },
             JWT_SECRET,
             { expiresIn: '7d' }
         );
 
-        return { token, email: user.email };
+        return { token, email: user.email, verified: user.email_verified_at !== null };
     },
 
     // Change password
@@ -130,6 +147,13 @@ module.exports = {
         }
 
         req.user = decoded;
+        
+        try {
+            Sentry.setUser({ id: decoded.userId, email: decoded.email });
+        } catch (e) {
+            // Ignore if Sentry is not initialized
+        }
+        
         next();
     }
 };
