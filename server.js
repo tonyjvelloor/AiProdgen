@@ -21,7 +21,7 @@ if (process.env.SENTRY_DSN) {
 }
 
 const { requireLoginRateLimit, requireApiRateLimit, requireGenerateRateLimit, requireEmailVerifyRateLimit } = require('./lib/ratelimit');
-const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
+
 require('dotenv').config();
 
 // Import auth and database modules

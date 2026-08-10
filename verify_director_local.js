@@ -3,8 +3,7 @@ const Database = require('better-sqlite3');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 
-// Dynamic import for node-fetch
-const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
+
 
 const DB_PATH = path.join(__dirname, 'users.db');
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
