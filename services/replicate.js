@@ -1,4 +1,4 @@
-const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
+
 
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 
