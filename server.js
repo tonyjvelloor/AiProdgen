@@ -6,15 +6,12 @@ const uuidv4 = () => crypto.randomUUID();
 const helmet = require('helmet');
 const compression = require('compression');
 const Sentry = require('@sentry/node');
-const { nodeProfilingIntegration } = require('@sentry/profiling-node');
 
 // Initialize Sentry before anything else
 if (process.env.SENTRY_DSN) {
     Sentry.init({
         dsn: process.env.SENTRY_DSN,
-        integrations: [
-            nodeProfilingIntegration(),
-        ],
+        integrations: [],
         environment: process.env.NODE_ENV || 'development',
         release: process.env.npm_package_version || '1.0.0',
         tracesSampleRate: 1.0, 
@@ -2474,8 +2471,7 @@ app.get('/', async (req, res) => {
 // Run founder migration on startup (idempotent)
 // db.migrateFounders().catch(console.error); // Deprecated in Supabase architecture
 
-if (require.main === module) {
- // ==========================================
+// ==========================================
 // WEEK 2: PRODUCTION ENGINES & OUTPUTS
 // ==========================================
 
@@ -2592,8 +2588,9 @@ app.put('/api/products/:id/primary-output', auth.requireAuth, async (req, res) =
 });
 
 // Start the Server
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-});
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`Server is running on port ${PORT}`);
+    });
 }
 module.exports = app;
