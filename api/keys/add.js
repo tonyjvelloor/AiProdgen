@@ -4,7 +4,7 @@ const { requireAuth } = require('../../lib/auth');
 const { encryptKey } = require('../../lib/keyVault');
 const { validateProviderKey } = require('../../lib/providers');
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   const user = requireAuth(req, res);

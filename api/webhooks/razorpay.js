@@ -2,7 +2,7 @@
 const crypto = require('crypto');
 const { supabaseAdmin } = require('../../lib/supabase');
 
-export const config = { api: { bodyParser: false } };
+
 
 async function getRawBody(req) {
   const chunks = [];
@@ -10,7 +10,7 @@ async function getRawBody(req) {
   return Buffer.concat(chunks);
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   const rawBody = await getRawBody(req);
@@ -42,3 +42,5 @@ export default async function handler(req, res) {
 
   res.status(200).send('ok');
 }
+module.exports = handler;
+module.exports.config = { api: { bodyParser: false } };
