@@ -243,6 +243,33 @@ module.exports = {
         return data || [];
     },
 
+    // ============ Revenue ============
+    // Every captured payment is written here so gross margin is computable.
+    // Idempotent on razorpay_payment_id: the checkout callback and the webhook
+    // can both report the same payment.
+    recordPayment: async ({ paymentId, orderId, userId, email, kind, planId, credits, amount, currency = 'INR' }) => {
+        if (!paymentId) return false;
+        const { error } = await supabaseAdmin.from('payments').upsert({
+            razorpay_payment_id: paymentId,
+            razorpay_order_id: orderId || null,
+            user_id: userId || null,
+            email: email || null,
+            kind,
+            plan_id: planId || null,
+            credits: credits || null,
+            amount,
+            currency
+        }, { onConflict: 'razorpay_payment_id' });
+        if (error) console.error('recordPayment failed:', error.message);
+        return !error;
+    },
+    getRevenue: async (sinceIso = null) => {
+        let q = supabaseAdmin.from('payments').select('amount, currency, kind, created_at').eq('status', 'captured');
+        if (sinceIso) q = q.gte('created_at', sinceIso);
+        const { data } = await q;
+        return data || [];
+    },
+
     // ============ Async Provider Jobs ============
     // Maps a provider-issued job id to the user who started it, so the polling
     // routes can refuse to serve someone else's result.

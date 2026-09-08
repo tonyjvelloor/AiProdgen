@@ -226,39 +226,55 @@
                 const data = await response.json();
                 
                 // Update UI - Revenue
-                document.getElementById('revenueToday').innerText = data.revenue.today;
-                document.getElementById('aiCost').innerText = data.revenue.aiCost;
-                document.getElementById('grossMargin').innerText = data.revenue.margin;
+                // Metrics that have no data yet render as a dash rather than a
+                // plausible-looking number. The dashboard used to show a
+                // hardcoded "$29.00" and "82%" margin regardless of reality.
+                const set = (id, value) => {
+                    const el = document.getElementById(id);
+                    if (el) el.innerText = (value === null || value === undefined || value === '') ? '—' : value;
+                };
 
-                // Update UI - Customers
-                document.getElementById('activeUsers').innerText = data.customers.activeUsers;
-                document.getElementById('activeProducts').innerText = data.customers.activeProducts;
-                document.getElementById('repeatUsage').innerText = data.customers.repeatUsage;
+                // Payments are per-currency; sum nothing across currencies.
+                const money = (totals) => {
+                    if (!totals || !Object.keys(totals).length) return '—';
+                    const symbol = { USD: '$', INR: '₹' };
+                    return Object.entries(totals)
+                        .map(([cur, minor]) => `${symbol[cur] || cur + ' '}${(minor / 100).toFixed(2)}`)
+                        .join('  ');
+                };
 
-                // Update UI - Production
-                document.getElementById('productionRuns').innerText = data.production.runs;
-                document.getElementById('successRate').innerText = data.production.successRate;
-                document.getElementById('avgTime').innerText = data.production.avgTime;
-                document.getElementById('avgCost').innerText = data.production.avgCost;
+                set('revenueToday', money(data.revenue.today));
+                set('aiCost', data.revenue.aiCost === null ? null : `$${Number(data.revenue.aiCost).toFixed(2)}`);
+                set('grossMargin', data.revenue.grossMargin);
 
-                // Update UI - Product Progress
-                document.getElementById('photographyReady').innerText = data.progress.photographyReady;
-                document.getElementById('marketplaceReady').innerText = data.progress.marketplaceReady;
-                document.getElementById('blueprintReady').innerText = data.progress.blueprintReady;
-                
-                document.getElementById('avgProductReadiness').innerText = data.progress.avgProductReadiness;
-                document.getElementById('timeToCampaign').innerText = data.progress.timeToCampaign;
-                document.getElementById('mostCommonDropoff').innerText = data.progress.mostCommonDropoff;
+                set('activeUsers', data.customers.activeUsers);
+                set('activeProducts', data.customers.activeProducts);
+                set('repeatUsage', data.customers.payingUsers);
 
-                // Update UI - Business Outcomes
-                document.getElementById('campaignsProduced').innerText = data.outcomes.campaignsProduced;
-                document.getElementById('timeSaved').innerText = data.outcomes.timeSaved;
-                document.getElementById('assetReuseRate').innerText = data.outcomes.assetReuseRate;
+                set('productionRuns', data.production.runs);
+                set('successRate', data.production.successRate);
+                set('avgTime', data.production.avgMinutes === null ? null : `${data.production.avgMinutes}m`);
+                set('avgCost', data.production.avgCost === null ? null : `$${Number(data.production.avgCost).toFixed(3)}`);
 
-                // Update UI - Growth
-                document.getElementById('trialPaid').innerText = data.growth.trialPaid;
-                document.getElementById('productsCompleted').innerText = data.growth.productsCompleted;
-                document.getElementById('outputsPerProduct').innerText = data.growth.outputsPerProduct;
+                set('photographyReady', data.progress.photographyReady);
+                set('marketplaceReady', data.progress.marketplaceReady);
+                set('blueprintReady', data.progress.blueprintReady);
+                set('avgProductReadiness', null);
+                set('timeToCampaign', null);
+                set('mostCommonDropoff', null);
+
+                set('campaignsProduced', data.outcomes.campaignsProduced);
+                set('timeSaved', `${data.outcomes.estimatedHoursSaved}h`);
+                set('assetReuseRate', null);
+
+                set('trialPaid', null);
+                set('productsCompleted', data.outcomes.campaignsProduced);
+                set('outputsPerProduct', null);
+
+                // Surface how much of AI spend is actually measured, so aiCost
+                // and grossMargin are never read as complete.
+                const coverage = document.getElementById('costCoverage');
+                if (coverage) coverage.innerText = data.revenue.costCoverage || '0%';
 
             } catch (error) {
                 console.error(error);

@@ -230,6 +230,11 @@ app.post('/api/webhooks/razorpay', express.raw({ type: 'application/json' }), as
 
             // Grant credits via ledger (append-only)
             await db.recordCreditPurchase(userId, creditsToGrant, payment.amount / 100, paymentId, orderId);
+            await db.recordPayment({
+                paymentId, orderId, userId,
+                kind: 'credits', credits: creditsToGrant,
+                amount: payment.amount, currency: payment.currency || 'INR'
+            });
             console.log(`✅ Successfully granted ${creditsToGrant} credits to user ${userId} via Webhook`);
             
             // Mark processed
@@ -923,6 +928,11 @@ app.post('/api/credits/verify', auth.requireAuth, async (req, res) => {
         // Add credits and record purchase
         await db.addCredits(user.id, pkg.credits);
         await db.recordCreditPurchase(user.id, pkg.credits, amount, razorpay_payment_id, razorpay_order_id);
+        await db.recordPayment({
+            paymentId: razorpay_payment_id, orderId: razorpay_order_id,
+            userId: user.id, email: user.email,
+            kind: 'credits', credits: pkg.credits, amount, currency: useCurrency
+        });
 
         const newBalance = await db.getUserCredits(user.id);
         console.log(`✅ Credits added: ${pkg.credits} for user ${user.email}. New balance: ${newBalance}`);
@@ -1062,6 +1072,15 @@ app.post('/api/plan/verify', auth.requireAuth, async (req, res) => {
         const planConfig = getPlanConfig(planId);
         await db.initUserCredits(user.id);
         await db.addCredits(user.id, planConfig.upscale);
+
+        const planPrice = PLAN_PRICES[planId] || {};
+        await db.recordPayment({
+            paymentId: razorpay_payment_id, orderId: razorpay_order_id,
+            userId: user.id, email: user.email,
+            kind: 'plan', planId,
+            amount: planPrice.onetime_usd || planPrice[`${billingCycle}_inr`] || 0,
+            currency: planPrice.onetime_usd ? 'USD' : 'INR'
+        });
 
         console.log(`✅ Plan activated: ${planId} (${billingCycle}) for ${user.email}`);
 
@@ -1435,49 +1454,87 @@ app.get('/api/admin/metrics', requireAdmin, async (req, res) => {
             }
         }
         
-        // Outcomes
-        const productsLaunched = marketplaceReady;
-        // Estimated Time Saved = 4.2h per commerce pack + 2.5h per photo pack
+        // --- 3. Money ---------------------------------------------------
+        // These were hardcoded ("$29.00", "82%") with a comment saying they
+        // were mocked for the prototype, which meant the dashboard reported a
+        // healthy margin regardless of what the business was actually doing.
+        const startOfToday = new Date(); startOfToday.setUTCHours(0, 0, 0, 0);
+
+        const [allPayments, todayPayments, runs] = await Promise.all([
+            db.getRevenue(),
+            db.getRevenue(startOfToday.toISOString()),
+            supabaseAdmin.from('ai_runs')
+                .select('provider_cost, storage_cost, platform_cost, status, started_at, completed_at')
+        ]);
+
+        // Payment amounts are in the smallest unit of their own currency, so
+        // they cannot simply be summed. Report per-currency totals.
+        const sumByCurrency = (rows) => rows.reduce((acc, p) => {
+            acc[p.currency] = (acc[p.currency] || 0) + p.amount;
+            return acc;
+        }, {});
+
+        const runRows = runs.data || [];
+        const costOf = (r) => Number(r.provider_cost || 0) + Number(r.storage_cost || 0) + Number(r.platform_cost || 0);
+        const aiCost = runRows.reduce((sum, r) => sum + costOf(r), 0);
+        const instrumentedRuns = runRows.filter((r) => costOf(r) > 0).length;
+
+        // Margin is only meaningful when both sides are known and in one
+        // currency. USD-denominated plan sales are the comparable figure;
+        // anything else returns null rather than an invented percentage.
+        const usdRevenue = (sumByCurrency(allPayments).USD || 0) / 100;
+        const grossMargin = usdRevenue > 0
+            ? `${(((usdRevenue - aiCost) / usdRevenue) * 100).toFixed(1)}%`
+            : null;
+
+        const completed = runRows.filter((r) => r.status === 'completed');
+        const durations = completed
+            .filter((r) => r.started_at && r.completed_at)
+            .map((r) => (new Date(r.completed_at) - new Date(r.started_at)) / 60000);
+        const avgMinutes = durations.length
+            ? (durations.reduce((a, b) => a + b, 0) / durations.length).toFixed(1)
+            : null;
+
         const timeSaved = (marketplaceReady * 4.2 + photographyReady * 2.5).toFixed(1);
-        
-        // Growth
-        const productsCompleted = marketplaceReady; // Temporary proxy
-        
-        // Mocking some financial / production numbers for the prototype
+
         res.json({
             revenue: {
-                aiCost: `$${(activeUsers * 2.4).toFixed(2)}`,
-                today: `$29.00`,
-                margin: `82%`
+                today: sumByCurrency(todayPayments),
+                allTime: sumByCurrency(allPayments),
+                aiCost: Number(aiCost.toFixed(4)),
+                grossMargin,
+                // How much of the AI spend is actually measured. Until this
+                // reaches 100%, aiCost and grossMargin are lower bounds:
+                // video, upscale and flux do not yet record their cost.
+                costCoverage: runRows.length
+                    ? `${((instrumentedRuns / runRows.length) * 100).toFixed(0)}%`
+                    : null
             },
             customers: {
                 activeUsers: activeUsers || 0,
-                activeProducts: activeProducts,
-                repeatUsage: `42%`
+                activeProducts,
+                payingUsers: new Set(allPayments.map((p) => p.user_id).filter(Boolean)).size
             },
             production: {
-                runs: 124,
-                successRate: `98.2%`,
-                avgTime: `3.2m`,
-                avgCost: `$0.12`
+                runs: runRows.length,
+                completed: completed.length,
+                failed: runRows.filter((r) => r.status === 'failed').length,
+                successRate: runRows.length
+                    ? `${((completed.length / runRows.length) * 100).toFixed(1)}%`
+                    : null,
+                avgMinutes,
+                avgCost: completed.length
+                    ? Number((aiCost / completed.length).toFixed(4))
+                    : null
             },
             progress: {
                 photographyReady,
                 marketplaceReady,
-                blueprintReady: advertisingReady,
-                avgProductReadiness: `64%`,
-                timeToCampaign: `48m`,
-                mostCommonDropoff: `Photography`
+                blueprintReady: advertisingReady
             },
             outcomes: {
-                campaignsProduced: productsLaunched,
-                timeSaved,
-                assetReuseRate: `1.8x`
-            },
-            growth: {
-                trialPaid: `14%`,
-                productsCompleted,
-                outputsPerProduct: 12
+                campaignsProduced: marketplaceReady,
+                estimatedHoursSaved: Number(timeSaved)
             }
         });
     } catch (error) {
