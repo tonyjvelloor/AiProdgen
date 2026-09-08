@@ -29,7 +29,6 @@
         "nodemailer": "^7.0.12",
         "pg": "^8.22.0",
         "razorpay": "^2.9.6",
-        "replicate": "^1.0.1",
-        "serverless-http": "^4.0.0"
+        "replicate": "^1.0.1"
     }
 }

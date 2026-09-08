@@ -1,4 +1,4 @@
-const { test, describe, before } = require('node:test');
+const { test, describe, after } = require('node:test');
 const assert = require('node:assert');
 
 require('dotenv').config();
@@ -6,28 +6,15 @@ require('dotenv').config();
 const HAS_CONFIG = !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.JWT_SECRET);
 const skip = HAS_CONFIG ? false : 'requires SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and JWT_SECRET';
 
-let call, sessionFor;
+const appHarness = require('./helpers/app');
+const jwt = require('jsonwebtoken');
 
-before(() => {
-    if (!HAS_CONFIG) return;
-    const serverless = require('serverless-http');
-    const jwt = require('jsonwebtoken');
-    const handler = serverless(require('../server'));
-
-    call = (method, path, headers = {}) => handler({
-        httpMethod: method,
-        path,
-        headers: { host: 'test', ...headers },
-        queryStringParameters: {},
-        body: null,
-        isBase64Encoded: false,
-        requestContext: { http: { method, path } }
-    }, {});
-
-    sessionFor = (userId) => ({
-        authorization: `Bearer ${jwt.sign({ userId, email: `${userId}@example.com` }, process.env.JWT_SECRET)}`
-    });
+const call = (method, path, headers = {}) => appHarness.request(method, path, headers);
+const sessionFor = (userId) => ({
+    authorization: `Bearer ${jwt.sign({ userId, email: `${userId}@example.com` }, process.env.JWT_SECRET || 'unused')}`
 });
+
+after(async () => { await appHarness.stop(); });
 
 // A provider job id (Replicate prediction / Veo operation) used to be enough to
 // read anyone's result, because the status routes proxied straight through.

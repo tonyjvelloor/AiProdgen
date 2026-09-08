@@ -1,4 +1,4 @@
-const { test, describe, before } = require('node:test');
+const { test, describe, after } = require('node:test');
 const assert = require('node:assert');
 
 require('dotenv').config();
@@ -6,22 +6,11 @@ require('dotenv').config();
 const HAS_CONFIG = !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.JWT_SECRET);
 const skip = HAS_CONFIG ? false : 'requires SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and JWT_SECRET';
 
-let call;
+const appHarness = require('./helpers/app');
 
-before(() => {
-    if (!HAS_CONFIG) return;
-    const serverless = require('serverless-http');
-    const handler = serverless(require('../server'));
-    call = (method, path, headers = {}) => handler({
-        httpMethod: method,
-        path,
-        headers: { host: 'test', ...headers },
-        queryStringParameters: {},
-        body: null,
-        isBase64Encoded: false,
-        requestContext: { http: { method, path } }
-    }, {});
-});
+const call = (method, path, headers = {}) => appHarness.request(method, path, headers);
+
+after(async () => { await appHarness.stop(); });
 
 const ADMIN_ROUTES = ['/api/admin/stats', '/api/admin/users', '/api/admin/metrics'];
 
