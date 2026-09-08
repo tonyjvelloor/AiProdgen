@@ -16,7 +16,9 @@ const TABLES = [
     'provider_registry', 'user_api_keys', 'user_entitlements', 'users',
     'webhook_events', 'workspaces',
     // added by migrations/001_production_readiness.sql
-    'pending_orders', 'ugc_projects', 'gallery_items', 'upscale_usage'
+    'pending_orders', 'ugc_projects', 'gallery_items', 'upscale_usage',
+    // added by migrations/002_async_job_ownership.sql
+    'async_jobs'
 ];
 
 // Columns the code writes that the original Supabase schema never had.
