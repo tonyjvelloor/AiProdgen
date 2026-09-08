@@ -4,7 +4,9 @@
     "description": "Professional Product Asset Generator",
     "main": "server.js",
     "scripts": {
-        "start": "node server.js"
+        "start": "node server.js",
+        "test": "node --test \"tests/**/*.test.js\"",
+        "check": "node scripts/check_deploy.js"
     },
     "dependencies": {
         "@google/genai": "^1.42.0",

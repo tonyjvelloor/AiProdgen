@@ -6,7 +6,8 @@ const path = require('path');
 
 
 const DB_PATH = path.join(__dirname, 'users.db');
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const { getJwtSecret } = require('./lib/jwtSecret');
+const JWT_SECRET = getJwtSecret();
 const API_URL = 'http://localhost:3002';
 
 async function runTest() {

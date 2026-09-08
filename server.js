@@ -2037,6 +2037,7 @@ app.post('/api/video/generate', auth.requireAuth, requireGenerateRateLimit, asyn
                 }
 
                 const operation = await ai.models.generateVideos(generateParams);
+                await db.recordAsyncJob(operation.name, user.userId, 'veo', 'video');
                 console.log(`🎬 Veo generation started for ${user.email}: ${operation.name}`);
 
                 // Increment gen count
@@ -2058,13 +2059,14 @@ app.post('/api/video/generate', auth.requireAuth, requireGenerateRateLimit, asyn
         // LTX / Wan models use Replicate
         // Verify credit balance
         let VIDEO_COST = 5;
-        const userCredits = await await db.getUserCredits(user.userId);
+        const userCredits = await db.getUserCredits(user.userId);
         if (userCredits < VIDEO_COST) {
             return res.status(402).json({ error: 'Insufficient credits', required: VIDEO_COST, current: userCredits });
         }
-        await await db.useCredits(user.userId, VIDEO_COST);
+        await db.useCredits(user.userId, VIDEO_COST);
 
         const prediction = await replicate.generateVideoFromImage(imageUrl, prompt, model, { endImageUrl, directorMode });
+        await db.recordAsyncJob(prediction.id, user.userId, 'replicate', 'video');
         console.log(`🎬 Video generation started for ${user.email}: ${prediction.id} (Model: ${model || 'wan'}, Mode: ${directorMode || 'standard'})`);
 
         res.json({
@@ -2086,6 +2088,14 @@ app.get('/api/video/veo-status/:operationName', auth.requireAuth, async (req, re
         const apiKey = req.query.apiKey || req.headers['x-api-key'] || process.env.GEMINI_API_KEY;
         if (!apiKey) {
             return res.status(403).json({ error: 'API key required to check Veo status' });
+        }
+
+        // A provider job id is not a capability. Refuse to poll one this user
+        // did not start; unknown ids read as not found rather than being
+        // proxied straight through to the provider.
+        const owner = await db.getAsyncJobOwner(req.params.operationName);
+        if (owner !== (req.user.userId)) {
+            return res.status(owner ? 403 : 404).json({ error: owner ? 'Unauthorized' : 'Not found' });
         }
 
         const ai = new GoogleGenAI({ apiKey });
@@ -2144,6 +2154,7 @@ app.post('/api/video/generate-veo', auth.requireAuth, requireGenerateRateLimit, 
         }
 
         const operation = await ai.models.generateVideos(generateParams);
+        await db.recordAsyncJob(operation.name, user.userId, 'veo', 'video');
         console.log(`🎬 Veo standalone generation for ${user.email}: ${operation.name}`);
 
         await db.incrementGenCount(user.userId);
@@ -2183,7 +2194,7 @@ app.post('/api/image/generate-flux', auth.requireAuth, requireGenerateRateLimit,
 
         // Flux Cost (2 credits)
         const FLUX_COST = 2;
-        const userCredits = await await db.getUserCredits(user.userId);
+        const userCredits = await db.getUserCredits(user.userId);
 
         if (userCredits < FLUX_COST) {
             return res.status(402).json({
@@ -2193,9 +2204,10 @@ app.post('/api/image/generate-flux', auth.requireAuth, requireGenerateRateLimit,
             });
         }
 
-        await await db.useCredits(user.userId, FLUX_COST);
+        await db.useCredits(user.userId, FLUX_COST);
 
         const prediction = await replicate.generateImageFlux(prompt, aspectRatio);
+        await db.recordAsyncJob(prediction.id, user.userId, 'replicate', 'image');
 
         console.log(`🎨 Flux generation started for ${user.email}: ${prediction.id}`);
 
@@ -2216,6 +2228,15 @@ app.post('/api/image/generate-flux', auth.requireAuth, requireGenerateRateLimit,
 app.get('/api/video/status/:id', auth.requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
+
+        // A provider job id is not a capability. Refuse to poll one this user
+        // did not start; unknown ids are treated as not found rather than
+        // proxied straight through to the provider.
+        const owner = await db.getAsyncJobOwner(id);
+        if (owner !== (req.user.userId)) {
+            return res.status(owner ? 403 : 404).json({ error: owner ? 'Unauthorized' : 'Not found' });
+        }
+
         const prediction = await replicate.getPredictionStatus(id);
         res.json(prediction);
     } catch (error) {
@@ -2405,7 +2426,8 @@ app.post('/api/ugc/render-scene', auth.requireAuth, requireGenerateRateLimit, as
             }
 
             const operation = await ai.models.generateVideos(generateParams);
-            await db.incrementGenerationCount(userId); // Deduct from BYOK limit
+            await db.recordAsyncJob(operation.name, userId, 'veo', 'ugc_scene');
+            await db.incrementGenCount(userId); // Deduct from BYOK limit
 
             return res.json({ predictionId: operation.name, status: 'starting' });
         }
@@ -2428,6 +2450,8 @@ app.post('/api/ugc/render-scene', auth.requireAuth, requireGenerateRateLimit, as
                 faceStrength: faceStrength || 0.8
             });
         }
+
+        await db.recordAsyncJob(prediction.id, userId, 'replicate', 'ugc_scene');
 
         // For simplicity in MVP: Client will call POST /api/ugc/gallery/add after successful poll.
         res.json({ predictionId: prediction.id, status: prediction.status });
@@ -2453,6 +2477,14 @@ app.post('/api/ugc/gallery/add', auth.requireAuth, async (req, res) => {
 app.get('/api/ugc/render-scene/status/:id', auth.requireAuth, async (req, res) => {
     try {
         const id = decodeURIComponent(req.params.id);
+
+        // A provider job id is not a capability. Refuse to poll one this user
+        // did not start; unknown ids read as not found rather than being
+        // proxied straight through to the provider.
+        const owner = await db.getAsyncJobOwner(id);
+        if (owner !== (req.user.userId)) {
+            return res.status(owner ? 403 : 404).json({ error: owner ? 'Unauthorized' : 'Not found' });
+        }
 
         // If it's a Google Veo Operation ID
         if (id.startsWith('projects/') || id.startsWith('operations/')) {

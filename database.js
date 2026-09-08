@@ -243,6 +243,25 @@ module.exports = {
         return data || [];
     },
 
+    // ============ Async Provider Jobs ============
+    // Maps a provider-issued job id to the user who started it, so the polling
+    // routes can refuse to serve someone else's result.
+    recordAsyncJob: async (externalId, userId, provider, kind = null) => {
+        if (!externalId || !userId) return false;
+        const { error } = await supabaseAdmin.from('async_jobs')
+            .upsert({ external_id: externalId, user_id: userId, provider, kind },
+                    { onConflict: 'external_id' });
+        if (error) console.error('recordAsyncJob failed:', error.message);
+        return !error;
+    },
+    getAsyncJobOwner: async (externalId) => {
+        const { data } = await supabaseAdmin.from('async_jobs')
+            .select('user_id')
+            .eq('external_id', externalId)
+            .single();
+        return data ? data.user_id : null;
+    },
+
     // ============ AI Runs & Generation History ============
     createAIRun: async (userId, productId, collectionId, job, cost, outputsReserved) => {
         try {
