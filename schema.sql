@@ -1,3 +1,18 @@
+-- schema.sql
+--
+-- INCOMPLETE. This file predates the v2 work and defines 5 of the 21 tables the
+-- application queries; the rest were created directly against the hosted
+-- database and were never captured here. Treat migrations/ as the source of
+-- truth for anything added from 2026-09 onward.
+--
+-- To capture a faithful baseline (constraints, defaults and foreign keys, which
+-- cannot be recovered from the REST introspection this repo can reach), run
+-- against the connection string in Supabase -> Project Settings -> Database:
+--
+--     pg_dump --schema-only --no-owner "$SUPABASE_DB_URL" > migrations/000_baseline.sql
+--
+-- Verify what the running code actually needs with: node scripts/check_deploy.js
+
 -- Supabase Schema for AiProdGen
 
 CREATE TABLE IF NOT EXISTS users (

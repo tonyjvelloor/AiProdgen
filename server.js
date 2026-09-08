@@ -23,7 +23,7 @@ if (process.env.SENTRY_DSN) {
     console.log("Sentry initialized.");
 }
 
-const { requireLoginRateLimit, requireApiRateLimit, requireGenerateRateLimit, requireEmailVerifyRateLimit } = require('./lib/ratelimit');
+const { requireLoginRateLimit, requireApiRateLimit, requireGenerateRateLimit, requireEmailVerifyRateLimit, rateLimitingEnabled } = require('./lib/ratelimit');
 
 // Import auth and database modules
 const auth = require('./auth');
@@ -45,6 +45,7 @@ const BlueprintEngine = require('./lib/engines/blueprint');
 const ProductionEngine = require('./lib/engines/production');
 const { supabaseAdmin, isSupabaseConfigured } = require('./lib/supabase');
 const { getJwtSecret } = require('./lib/jwtSecret');
+const jwt = require('jsonwebtoken');
 
 // ... (existing code)
 
@@ -136,6 +137,7 @@ app.get('/api/health', (req, res) => {
         missingRequiredEnv: missing,
         presentOptionalEnv: optional.filter((k) => !!process.env[k]),
         supabaseConfigured: isSupabaseConfigured,
+        rateLimitingEnabled: rateLimitingEnabled,
         nodeEnv: process.env.NODE_ENV || 'development'
     });
 });
@@ -1283,24 +1285,34 @@ app.post('/api/upscale-image', requireGenerateRateLimit, async (req, res) => {
 // ============ Admin Routes ============
 
 // Admin Middleware
+//
+// This used to accept a hardcoded x-admin-token, handed out by an admin/admin123
+// login. Both strings were committed to this repository and gate user edit and
+// delete. Admin is now a claim on the ordinary session JWT, backed by
+// users.is_admin, so there is no second credential to leak.
 const requireAdmin = async (req, res, next) => {
-    const adminToken = req.headers['x-admin-token'];
-    // Simple hardcoded token for this phase. In production, use JWT with role='admin'
-    if (adminToken === 'your-admin-secret-token-123') {
+    try {
+        const token = (req.headers.authorization || '').replace(/^Bearer /i, '')
+            || (req.cookies && req.cookies.session);
+        if (!token) return res.status(401).json({ error: 'Unauthorized Admin Access' });
+
+        const decoded = jwt.verify(token, getJwtSecret());
+        const user = await db.getUserById(decoded.userId || decoded.sub);
+        if (!user || !user.is_admin || !user.is_active) {
+            return res.status(403).json({ error: 'Admin privileges required' });
+        }
+
+        req.adminUser = user;
         next();
-    } else {
-        res.status(401).json({ error: "Unauthorized Admin Access" });
+    } catch (err) {
+        return res.status(401).json({ error: 'Unauthorized Admin Access' });
     }
 };
 
-app.post('/api/admin/login', async (req, res) => {
-    const { username, password } = req.body;
-    // Hardcoded credentials as per plan
-    if (username === 'admin' && password === 'admin123') {
-        res.json({ token: 'your-admin-secret-token-123' });
-    } else {
-        res.status(401).json({ error: "Invalid credentials" });
-    }
+// Admins sign in through the normal login route; this reports whether the
+// current session carries admin rights so the dashboard can route accordingly.
+app.get('/api/admin/session', requireAdmin, (req, res) => {
+    res.json({ admin: true, email: req.adminUser.email });
 });
 
 app.get('/api/admin/stats', requireAdmin, async (req, res) => {
@@ -1383,7 +1395,7 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
 // ==========================================
 // SPRINT 1: ADMIN METRICS DASHBOARD
 // ==========================================
-app.get('/api/admin/metrics', auth.requireAuth, async (req, res) => {
+app.get('/api/admin/metrics', requireAdmin, async (req, res) => {
     try {
         const { supabaseAdmin } = require('./lib/supabase');
         
@@ -2583,6 +2595,16 @@ app.post('/api/products/:id/jobs/campaign_production', auth.requireAuth, async (
 app.get('/api/collections/:id', auth.requireAuth, async (req, res) => {
     try {
         const collection = await OutputService.getCollection(req.params.id);
+        if (!collection) return res.status(404).json({ error: 'Not found' });
+
+        // A collection belongs to a product, which belongs to a workspace.
+        // Without this, any signed-in user could poll anyone else's job.
+        const product = await ProductService.getProductById(collection.product_id);
+        const workspace = await WorkspaceService.getOrCreateWorkspace(req.user.userId);
+        if (!product || product.workspace_id !== workspace.id) {
+            return res.status(403).json({ error: 'Unauthorized' });
+        }
+
         res.json(collection);
     } catch (error) {
         console.error(error);
@@ -2594,6 +2616,15 @@ app.get('/api/collections/:id', auth.requireAuth, async (req, res) => {
 app.put('/api/products/:id/primary-output', auth.requireAuth, async (req, res) => {
     try {
         const { outputId } = req.body;
+
+        // This wrote straight to products by id, so any signed-in user could
+        // repoint another workspace's product at an arbitrary output.
+        const product = await ProductService.getProductById(req.params.id);
+        const workspace = await WorkspaceService.getOrCreateWorkspace(req.user.userId);
+        if (!product || product.workspace_id !== workspace.id) {
+            return res.status(403).json({ error: 'Unauthorized' });
+        }
+
         const { error } = await supabaseAdmin
             .from('products')
             .update({ primary_output_id: outputId })

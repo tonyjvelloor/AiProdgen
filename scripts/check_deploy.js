@@ -14,8 +14,16 @@ const TABLES = [
     'ai_runs', 'auth_tokens', 'credit_transactions', 'generation_logs', 'generations',
     'output_authorizations', 'output_collections', 'outputs', 'products', 'provider_calls',
     'provider_registry', 'user_api_keys', 'user_entitlements', 'users',
-    'webhook_events', 'workspaces'
+    'webhook_events', 'workspaces',
+    // added by migrations/001_production_readiness.sql
+    'pending_orders', 'ugc_projects', 'gallery_items', 'upscale_usage'
 ];
+
+// Columns the code writes that the original Supabase schema never had.
+const COLUMNS = {
+    users: ['password_hash', 'is_active', 'is_admin', 'plan', 'billing_cycle', 'monthly_gen_count', 'monthly_ugc_count', 'usage_period_start'],
+    credit_transactions: ['source', 'reference_id']
+};
 
 let failed = false;
 const bad = (m) => { failed = true; console.log(`  FAIL  ${m}`); };
@@ -60,10 +68,19 @@ const ok = (m) => console.log(`  ok    ${m}`);
         if (error) { missing.push(t); bad(`${t} — ${error.message}`); } else ok(t);
     }
 
+    console.log('\nColumns');
+    for (const [table, cols] of Object.entries(COLUMNS)) {
+        for (const c of cols) {
+            const { error } = await supabaseAdmin.from(table).select(c).limit(0);
+            if (error) { missing.push(`${table}.${c}`); bad(`${table}.${c} — missing`); }
+            else ok(`${table}.${c}`);
+        }
+    }
+
     console.log('');
     if (missing.length) {
-        console.log(`${missing.length}/${TABLES.length} tables missing. schema.sql only defines 5 of them;`);
-        console.log('the v2 tables were never captured in a migration. Create them before going live.\n');
+        console.log(`${missing.length} missing object(s). Apply migrations/001_production_readiness.sql`);
+        console.log('in the Supabase SQL editor, then re-run this check.\n');
     }
     process.exit(failed ? 1 : 0);
 })().catch((e) => { console.error('\ncheck_deploy crashed:', e.message, '\n'); process.exit(1); });
