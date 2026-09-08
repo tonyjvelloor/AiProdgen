@@ -63,6 +63,21 @@
                         <dt class="text-sm font-medium text-gray-500 truncate">Gross Margin</dt>
                         <dd class="mt-1 text-2xl font-semibold text-green-600" id="grossMargin">-</dd>
                     </div>
+                    <!-- How much of the AI spend is actually measured. Until this
+                         reads 100%, AI Cost and Gross Margin above are lower
+                         bounds, and the dashboard should say so rather than
+                         letting them be read as complete. -->
+                    <div class="bg-white overflow-hidden shadow rounded-lg border border-gray-100 p-5">
+                        <dt class="text-sm font-medium text-gray-500 truncate">Cost Coverage</dt>
+                        <dd class="mt-1 text-2xl font-semibold text-gray-900" id="costCoverage">-</dd>
+                        <p class="mt-1 text-xs text-gray-400">
+                            <span id="platformFundedRuns">-</span> platform-funded ·
+                            <span id="customerFundedRuns">-</span> BYOK
+                        </p>
+                        <p id="coverageWarning" class="mt-1 text-xs text-amber-600 hidden">
+                            Cost and margin are lower bounds.
+                        </p>
+                    </div>
                 </div>
             </section>
 
@@ -273,8 +288,16 @@
 
                 // Surface how much of AI spend is actually measured, so aiCost
                 // and grossMargin are never read as complete.
-                const coverage = document.getElementById('costCoverage');
-                if (coverage) coverage.innerText = data.revenue.costCoverage || '0%';
+                set('costCoverage', data.revenue.costCoverage);
+                set('platformFundedRuns', data.revenue.platformFundedRuns);
+                set('customerFundedRuns', data.revenue.customerFundedRuns);
+
+                // Only claim the cost figures are complete when they are.
+                const warn = document.getElementById('coverageWarning');
+                if (warn) {
+                    const pct = parseInt(data.revenue.costCoverage, 10);
+                    warn.classList.toggle('hidden', Number.isFinite(pct) && pct >= 100);
+                }
 
             } catch (error) {
                 console.error(error);

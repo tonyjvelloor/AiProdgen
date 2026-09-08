@@ -1006,6 +1006,7 @@
                             body: JSON.stringify({ prompt: nd.data.scenePrompt, faceImage, productImage, faceStrength: 0.8 })
                         });
                         const data = await res.json();
+                        if (handleByokRequired(res, data)) { updateNodeStatus(id, 'error', 'Needs your API key'); return; }
                         if (data.error) throw new Error(data.error);
 
                         const result = await pollUntilDone(data.predictionId);
@@ -1039,7 +1040,7 @@
 
                     try {
                         const token = localStorage.getItem('token');
-                        const apiKey = localStorage.getItem('geminiApiKey');
+                        const apiKey = localStorage.getItem('gemini_api_key');
                         const bodyPayload = { imageUrl, prompt: motionPrompt, model };
                         if (apiKey) bodyPayload.apiKey = apiKey;
                         const res = await fetch('/api/video/generate', {
@@ -1048,6 +1049,7 @@
                             body: JSON.stringify(bodyPayload)
                         });
                         const data = await res.json();
+                        if (handleByokRequired(res, data)) { updateNodeStatus(id, 'error', 'Needs your API key'); return; }
                         if (data.error) throw new Error(data.error);
 
                         let videoUrl;
@@ -1130,6 +1132,28 @@
         function updateNodePreview(nodeId, imageUrl) {
             const imgs = document.querySelectorAll(`#node-${nodeId} .node-preview-img`);
             imgs.forEach(img => { img.src = imageUrl; img.classList.remove('hidden'); });
+        }
+
+        // Veo runs on the caller's own Google AI key (the platform no longer
+        // funds it), so a 402 BYOK_REQUIRED is a normal, actionable state --
+        // not a failure. Point the user at where they set the key instead of
+        // surfacing a raw error string.
+        function handleByokRequired(res, data) {
+            if (res.status !== 402 || data?.code !== 'BYOK_REQUIRED') return false;
+            showToast('Veo needs your own Google AI key. Add it under "Your Gemini API Key", then try again.', 'error');
+            const input = document.getElementById('apiKeyInput');
+            if (input) {
+                input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                input.focus();
+            } else {
+                // ugc.html has no key field; send the user to the page that does.
+                setTimeout(() => {
+                    if (confirm('Veo requires your own Google AI API key.\n\nOpen the app settings to add it?')) {
+                        window.location.href = '/app.html#api-key';
+                    }
+                }, 400);
+            }
+            return true;
         }
 
         function showToast(msg, type = 'info') {
@@ -1333,7 +1357,7 @@
                 if (!imageUrl) throw new Error("No input image");
 
                 const token = localStorage.getItem('token');
-                const apiKey = localStorage.getItem('geminiApiKey');
+                const apiKey = localStorage.getItem('gemini_api_key');
 
                 let apiEndpoint = '/api/video/generate-ltx';
                 let payload = { imageUrl, prompt: nd.data.motionPrompt };

@@ -2151,6 +2151,28 @@
         ];
 
         // ============ Toast Notifications ============
+        // Veo runs on the caller's own Google AI key (the platform no longer
+        // funds it), so a 402 BYOK_REQUIRED is a normal, actionable state --
+        // not a failure. Point the user at where they set the key instead of
+        // surfacing a raw error string.
+        function handleByokRequired(res, data) {
+            if (res.status !== 402 || data?.code !== 'BYOK_REQUIRED') return false;
+            showToast('Veo needs your own Google AI key. Add it under "Your Gemini API Key", then try again.', 'error');
+            const input = document.getElementById('apiKeyInput');
+            if (input) {
+                input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                input.focus();
+            } else {
+                // ugc.html has no key field; send the user to the page that does.
+                setTimeout(() => {
+                    if (confirm('Veo requires your own Google AI API key.\n\nOpen the app settings to add it?')) {
+                        window.location.href = '/app.html#api-key';
+                    }
+                }, 400);
+            }
+            return true;
+        }
+
         function showToast(message, type = 'info', duration = 4000) {
             const container = document.getElementById('toastContainer');
             const toast = document.createElement('div');
@@ -2984,6 +3006,7 @@
                     })
                 });
                 const data = await res.json();
+                if (handleByokRequired(res, data)) return;
                 if (data.error) throw new Error(data.error);
                 document.getElementById('textOutput').innerHTML = data.text ? formatMarkdown(data.text) : '<p class="text-red-500">Error generating copy</p>';
                 document.getElementById('copyTextBtn').classList.remove('hidden');
@@ -3141,7 +3164,7 @@
 
             try {
                 const token = localStorage.getItem('token');
-                const apiKey = localStorage.getItem('geminiApiKey');
+                const apiKey = localStorage.getItem('gemini_api_key');
                 const payload = { prompt, model: 'veo' };
                 if (imageUrl) payload.imageUrl = imageUrl;
                 if (apiKey) payload.apiKey = apiKey;
@@ -3153,6 +3176,7 @@
                 });
 
                 const data = await res.json();
+                if (handleByokRequired(res, data)) return;
                 if (data.error) throw new Error(data.error);
 
                 if (data.veoOperation) {
@@ -3180,7 +3204,7 @@
 
             try {
                 const token = localStorage.getItem('token');
-                const apiKey = localStorage.getItem('geminiApiKey');
+                const apiKey = localStorage.getItem('gemini_api_key');
                 const payload = {
                     imageUrl: startUrl,
                     endImageUrl: endUrl,
@@ -3197,6 +3221,7 @@
                 });
 
                 const data = await res.json();
+                if (handleByokRequired(res, data)) return;
                 if (data.error) throw new Error(data.error);
 
                 pollDirectorStatus(data.predictionId, 'video');
@@ -3220,7 +3245,7 @@
 
             try {
                 const token = localStorage.getItem('token');
-                const apiKey = localStorage.getItem('geminiApiKey');
+                const apiKey = localStorage.getItem('gemini_api_key');
                 const payload = {
                     imageUrl: sourceUrl,
                     prompt: prompt,
@@ -3236,6 +3261,7 @@
                 });
 
                 const data = await res.json();
+                if (handleByokRequired(res, data)) return;
                 if (data.error) throw new Error(data.error);
 
                 pollDirectorStatus(data.predictionId, 'video');
@@ -3266,6 +3292,7 @@
                 });
 
                 const data = await res.json();
+                if (handleByokRequired(res, data)) return;
                 if (data.error) throw new Error(data.error);
 
                 pollDirectorStatus(data.predictionId, 'image');
@@ -3302,7 +3329,7 @@
         // Veo-specific Director polling
         async function pollVeoDirectorStatus(operationName) {
             const token = localStorage.getItem('token');
-            const apiKey = localStorage.getItem('geminiApiKey');
+            const apiKey = localStorage.getItem('gemini_api_key');
             const pollInterval = setInterval(async () => {
                 try {
                     let url = `/api/video/veo-status/${encodeURIComponent(operationName)}`;
@@ -3510,6 +3537,7 @@
                 });
 
                 const data = await res.json();
+                if (handleByokRequired(res, data)) return;
                 if (data.error) throw new Error(data.error);
 
                 btn.textContent = 'Generating... (Do not close)';
