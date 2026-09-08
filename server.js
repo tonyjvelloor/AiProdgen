@@ -44,6 +44,7 @@ const CommerceEngine = require('./lib/engines/commerce');
 const BlueprintEngine = require('./lib/engines/blueprint');
 const ProductionEngine = require('./lib/engines/production');
 const { supabaseAdmin, isSupabaseConfigured } = require('./lib/supabase');
+const { getJwtSecret } = require('./lib/jwtSecret');
 
 // ... (existing code)
 
@@ -1683,7 +1684,7 @@ app.post('/api/auth/signup', requireLoginRateLimit, async (req, res) => {
         // Auto-login (generate token)
         const user = await db.getUserByEmail(email);
         const jwt = require('jsonwebtoken');
-        const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+        const JWT_SECRET = getJwtSecret();
         const token = jwt.sign(
             { userId: user.id, email: user.email },
             JWT_SECRET,
@@ -1758,7 +1759,7 @@ app.post('/api/auth/google', async (req, res) => {
 
         // Generate JWT token
         const jwt = require('jsonwebtoken');
-        const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+        const JWT_SECRET = getJwtSecret();
         const token = jwt.sign(
             { userId: user.id, email: user.email },
             JWT_SECRET,

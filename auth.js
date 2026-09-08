@@ -5,7 +5,7 @@ const Sentry = require('@sentry/node');
 const crypto = require('crypto');
 const emailService = require('./lib/email');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const { getJwtSecret } = require('./lib/jwtSecret');
 const SALT_ROUNDS = 10;
 
 module.exports = {
@@ -96,7 +96,7 @@ module.exports = {
                 email: user.email,
                 verified: user.email_verified_at !== null 
             },
-            JWT_SECRET,
+            getJwtSecret(),
             { expiresIn: '7d' }
         );
 
@@ -126,7 +126,7 @@ module.exports = {
     // Verify JWT token
     verifyToken: (token) => {
         try {
-            return jwt.verify(token, JWT_SECRET);
+            return jwt.verify(token, getJwtSecret());
         } catch (error) {
             return null;
         }

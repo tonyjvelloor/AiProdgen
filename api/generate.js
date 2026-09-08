@@ -21,7 +21,7 @@ try {
         }
 
         // 2. Fetch User's Key (or fallback)
-        const { data: keyData } = await supabaseAdmin.from('user_keys')
+        const { data: keyData } = await supabaseAdmin.from('user_api_keys')
             .select('encrypted_key')
             .eq('user_id', user.id)
             .eq('provider', provider)

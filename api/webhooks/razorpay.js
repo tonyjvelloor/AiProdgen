@@ -10,17 +10,36 @@ async function getRawBody(req) {
   return Buffer.concat(chunks);
 }
 
+// Constant-time compare so a forged signature can't be recovered byte by byte
+// from response timing.
+function signatureMatches(signature, expected) {
+  if (typeof signature !== 'string') return false;
+  const a = Buffer.from(signature, 'utf8');
+  const b = Buffer.from(expected, 'utf8');
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
 async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
+
+  // Fail closed. Falling back to a placeholder secret would make every
+  // signature check pass for anyone who read this file, letting a forged
+  // payment.captured event grant paid entitlements for free.
+  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    console.error('[config] RAZORPAY_WEBHOOK_SECRET is not set — rejecting webhook.');
+    return res.status(503).json({ error: 'Webhook processing is not configured.' });
+  }
 
   const rawBody = await getRawBody(req);
   const signature = req.headers['x-razorpay-signature'];
   const expected = crypto
-    .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET || 'test_secret')
+    .createHmac('sha256', webhookSecret)
     .update(rawBody)
     .digest('hex');
 
-  if (signature !== expected) return res.status(400).send('Invalid signature');
+  if (!signatureMatches(signature, expected)) return res.status(400).send('Invalid signature');
 
   const event = JSON.parse(rawBody.toString());
 

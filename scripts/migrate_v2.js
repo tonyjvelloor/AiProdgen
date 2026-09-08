@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { supabase } = require('../lib/supabase');
+const { supabaseAdmin: supabase } = require('../lib/supabase');
 
 async function migrateData() {
     console.log('Starting V2 Data Migration...');
