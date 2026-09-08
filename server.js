@@ -45,6 +45,7 @@ const BlueprintEngine = require('./lib/engines/blueprint');
 const ProductionEngine = require('./lib/engines/production');
 const { supabaseAdmin, isSupabaseConfigured } = require('./lib/supabase');
 const { getJwtSecret } = require('./lib/jwtSecret');
+const UsageRecorder = require('./lib/usage_recorder');
 const jwt = require('jsonwebtoken');
 
 // ... (existing code)
@@ -634,6 +635,10 @@ app.post('/api/generate-image', auth.requireAuth, requireVerifiedUser, requireGe
             // Increment monthly gen count for paid plans
             if (planConfig.type === 'server' && userPlan.plan !== 'lifetime_founder') {
                 await db.incrementGenCount(userId);
+                await UsageRecorder.record({
+                    userId, job: 'generate_image', model: 'gemini-image',
+                    fundedBy: userKey ? 'byok' : 'platform'
+                });
             }
             // Deduct credit for founder plan
             if (userPlan.plan === 'lifetime_founder') {
@@ -746,6 +751,10 @@ app.post('/api/upscale-esrgan', auth.requireAuth, requireVerifiedUser, requireGe
         }
 
         if (!result.output) {
+            await UsageRecorder.record({
+                userId: req.user.userId, job: 'upscale', model: 'esrgan',
+                fundedBy: 'platform', status: 'failed', error: 'no output from upscaler'
+            });
             throw new Error('No output received from upscaler');
         }
 
@@ -755,6 +764,10 @@ app.post('/api/upscale-esrgan', auth.requireAuth, requireVerifiedUser, requireGe
         const upscaledBase64 = Buffer.from(imageBuffer).toString('base64');
 
         console.log(`✅ Upscaling complete (${upscaleScale}x)`);
+
+        await UsageRecorder.record({
+            userId: req.user.userId, job: 'upscale', model: 'esrgan', fundedBy: 'platform'
+        });
 
         res.json({
             image: upscaledBase64,
@@ -1220,6 +1233,9 @@ app.post('/api/upscale-esrgan-paid', auth.requireAuth, requireVerifiedUser, requ
 
         // Log usage
         await db.logUpscaleUsage(user.id, 1, upscaleScale, enableFaceEnhance);
+        await UsageRecorder.record({
+            userId: user.id, job: 'upscale_paid', model: 'esrgan', fundedBy: 'platform'
+        });
 
         // Fetch the upscaled image and convert to base64
         const imageResponse = await fetch(result.output);
@@ -1484,7 +1500,7 @@ app.get('/api/admin/metrics', requireAdmin, async (req, res) => {
             db.getRevenue(),
             db.getRevenue(startOfToday.toISOString()),
             supabaseAdmin.from('ai_runs')
-                .select('provider_cost, storage_cost, platform_cost, status, started_at, completed_at')
+                .select('provider_cost, storage_cost, platform_cost, status, started_at, completed_at, funded_by, job')
         ]);
 
         // Payment amounts are in the smallest unit of their own currency, so
@@ -1497,7 +1513,14 @@ app.get('/api/admin/metrics', requireAdmin, async (req, res) => {
         const runRows = runs.data || [];
         const costOf = (r) => Number(r.provider_cost || 0) + Number(r.storage_cost || 0) + Number(r.platform_cost || 0);
         const aiCost = runRows.reduce((sum, r) => sum + costOf(r), 0);
-        const instrumentedRuns = runRows.filter((r) => costOf(r) > 0).length;
+
+        // Coverage is only meaningful over platform-funded runs. A BYOK run
+        // costs the platform nothing by design, so counting it as
+        // "uninstrumented" because its cost is zero would understate coverage
+        // and make the number unreadable.
+        const platformRuns = runRows.filter((r) => (r.funded_by || 'platform') === 'platform');
+        const byokRuns = runRows.length - platformRuns.length;
+        const instrumentedRuns = platformRuns.filter((r) => costOf(r) > 0).length;
 
         // Margin is only meaningful when both sides are known and in one
         // currency. USD-denominated plan sales are the comparable figure;
@@ -1526,9 +1549,11 @@ app.get('/api/admin/metrics', requireAdmin, async (req, res) => {
                 // How much of the AI spend is actually measured. Until this
                 // reaches 100%, aiCost and grossMargin are lower bounds:
                 // video, upscale and flux do not yet record their cost.
-                costCoverage: runRows.length
-                    ? `${((instrumentedRuns / runRows.length) * 100).toFixed(0)}%`
-                    : null
+                costCoverage: platformRuns.length
+                    ? `${((instrumentedRuns / platformRuns.length) * 100).toFixed(0)}%`
+                    : null,
+                platformFundedRuns: platformRuns.length,
+                customerFundedRuns: byokRuns
             },
             customers: {
                 activeUsers: activeUsers || 0,
@@ -1543,8 +1568,10 @@ app.get('/api/admin/metrics', requireAdmin, async (req, res) => {
                     ? `${((completed.length / runRows.length) * 100).toFixed(1)}%`
                     : null,
                 avgMinutes,
-                avgCost: completed.length
-                    ? Number((aiCost / completed.length).toFixed(4))
+                // Cost per platform-funded generation. Dividing by all runs
+                // would dilute this with BYOK work the platform never paid for.
+                avgCost: platformRuns.length
+                    ? Number((aiCost / platformRuns.length).toFixed(4))
                     : null
             },
             progress: {
@@ -2115,6 +2142,9 @@ app.post('/api/video/generate', auth.requireAuth, requireGenerateRateLimit, asyn
 
                 const operation = await ai.models.generateVideos(generateParams);
                 await db.recordAsyncJob(operation.name, user.userId, 'veo', 'video');
+                await UsageRecorder.record({
+                    userId: user.userId, job: 'video_veo', model: 'veo', fundedBy: 'byok'
+                });
                 console.log(`🎬 Veo generation started for ${user.email}: ${operation.name}`);
 
                 // Increment gen count
@@ -2144,6 +2174,10 @@ app.post('/api/video/generate', auth.requireAuth, requireGenerateRateLimit, asyn
 
         const prediction = await replicate.generateVideoFromImage(imageUrl, prompt, model, { endImageUrl, directorMode });
         await db.recordAsyncJob(prediction.id, user.userId, 'replicate', 'video');
+        await UsageRecorder.record({
+            userId: user.userId, job: 'video', fundedBy: 'platform',
+            model: (model === 'wan') ? 'wan-i2v' : 'ltx-video'
+        });
         console.log(`🎬 Video generation started for ${user.email}: ${prediction.id} (Model: ${model || 'wan'}, Mode: ${directorMode || 'standard'})`);
 
         res.json({
@@ -2232,6 +2266,9 @@ app.post('/api/video/generate-veo', auth.requireAuth, requireGenerateRateLimit, 
 
         const operation = await ai.models.generateVideos(generateParams);
         await db.recordAsyncJob(operation.name, user.userId, 'veo', 'video');
+        await UsageRecorder.record({
+            userId: user.userId, job: 'video_veo', model: 'veo', fundedBy: 'byok'
+        });
         console.log(`🎬 Veo standalone generation for ${user.email}: ${operation.name}`);
 
         await db.incrementGenCount(user.userId);
@@ -2285,6 +2322,9 @@ app.post('/api/image/generate-flux', auth.requireAuth, requireGenerateRateLimit,
 
         const prediction = await replicate.generateImageFlux(prompt, aspectRatio);
         await db.recordAsyncJob(prediction.id, user.userId, 'replicate', 'image');
+        await UsageRecorder.record({
+            userId: user.userId, job: 'flux_image', model: 'flux-schnell', fundedBy: 'platform'
+        });
 
         console.log(`🎨 Flux generation started for ${user.email}: ${prediction.id}`);
 
@@ -2504,6 +2544,9 @@ app.post('/api/ugc/render-scene', auth.requireAuth, requireGenerateRateLimit, as
 
             const operation = await ai.models.generateVideos(generateParams);
             await db.recordAsyncJob(operation.name, userId, 'veo', 'ugc_scene');
+            await UsageRecorder.record({
+                userId, job: 'ugc_scene_veo', model: 'veo', fundedBy: 'byok'
+            });
             await db.incrementGenCount(userId); // Deduct from BYOK limit
 
             return res.json({ predictionId: operation.name, status: 'starting' });
@@ -2529,6 +2572,10 @@ app.post('/api/ugc/render-scene', auth.requireAuth, requireGenerateRateLimit, as
         }
 
         await db.recordAsyncJob(prediction.id, userId, 'replicate', 'ugc_scene');
+        await UsageRecorder.record({
+            userId, job: 'ugc_scene', fundedBy: 'platform',
+            model: faceImage ? 'instant-id' : 'flux-schnell'
+        });
 
         // For simplicity in MVP: Client will call POST /api/ugc/gallery/add after successful poll.
         res.json({ predictionId: prediction.id, status: prediction.status });

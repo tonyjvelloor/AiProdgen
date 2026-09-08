@@ -326,9 +326,11 @@ module.exports = {
     },
     updateAIRun: async (runId, updates) => {
         if (!runId) return;
-        try {
-            await supabaseAdmin.from('ai_runs').update(updates).eq('id', runId);
-        } catch(e) {}
+        // This used to swallow every error silently. A missing column meant
+        // cost was never written and nothing said so -- the same failure mode
+        // that hid the credit ledger writing to a column that did not exist.
+        const { error } = await supabaseAdmin.from('ai_runs').update(updates).eq('id', runId);
+        if (error) console.error(`updateAIRun(${runId}) failed:`, error.message);
     },
     logGeneration: async (userId, provider, model, promptTokens, completionTokens, estimatedCost, creditsUsed, latency, status, errorMsg, presetVersion, category, aspectRatio, goal, inputImageId, outputImageIds, providerResponseId, runId, outputsUsed, engineVersion, collectionId, productId) => { 
         const { data } = await supabaseAdmin.from('generation_logs').insert({
