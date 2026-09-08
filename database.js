@@ -263,6 +263,23 @@ module.exports = {
         if (error) console.error('recordPayment failed:', error.message);
         return !error;
     },
+    // Sum of what this user's runs have cost the platform in the trailing
+    // window. Backs the spend ceiling in PolicyEngine, so a pricing mistake is
+    // bounded instead of unbounded.
+    getUserPlatformSpend: async (userId, days = 30) => {
+        const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+        const { data, error } = await supabaseAdmin.from('ai_runs')
+            .select('provider_cost, storage_cost, platform_cost')
+            .eq('user_id', userId)
+            .gte('started_at', since);
+        if (error) {
+            console.error('getUserPlatformSpend failed:', error.message);
+            return 0;
+        }
+        return (data || []).reduce((sum, r) =>
+            sum + Number(r.provider_cost || 0) + Number(r.storage_cost || 0) + Number(r.platform_cost || 0), 0);
+    },
+
     getRevenue: async (sinceIso = null) => {
         let q = supabaseAdmin.from('payments').select('amount, currency, kind, created_at').eq('status', 'captured');
         if (sinceIso) q = q.gte('created_at', sinceIso);

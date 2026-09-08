@@ -785,8 +785,14 @@ const PLANS = {
     free_explorer: { gen_limit: 0, byok_gen_limit: 20, upscale: 0, ugc: 0, director: false, veo: false, requires_byok: true, watermark: true, templates: 'none', bulk: false, commercial: false },
     hobbyist_ltd: { gen_limit: 0, byok_gen_limit: 500, upscale: 0, ugc: 0, director: false, veo: false, requires_byok: true, watermark: false, templates: 'basic', bulk: false, commercial: false },
     pro_founder_ltd: { gen_limit: 0, byok_gen_limit: 3000, upscale: 50, ugc: 10, director: true, veo: true, requires_byok: true, watermark: false, templates: 'advanced', bulk: false, commercial: false },
-    agency_ltd: { gen_limit: 0, byok_gen_limit: Infinity, upscale: 200, ugc: 50, director: true, veo: true, requires_byok: true, watermark: false, templates: 'advanced', bulk: true, commercial: true },
-    lifetime_founder: { gen_limit: Infinity, byok_gen_limit: Infinity, upscale: 999, ugc: 50, director: true, veo: true, requires_byok: false, watermark: false, templates: 'advanced', bulk: true, commercial: true }
+    // Infinity here meant the `monthly_gen_count >= byok_gen_limit` guards never
+    // fired, so runaway use had no signal. A high finite ceiling behaves the
+    // same for real customers and still trips on abuse.
+    agency_ltd: { gen_limit: 0, byok_gen_limit: 25000, upscale: 200, ugc: 50, director: true, veo: true, requires_byok: true, watermark: false, templates: 'advanced', bulk: true, commercial: true },
+    // Was the only plan with requires_byok: false and gen_limit: Infinity —
+    // unlimited generation on the platform's own key, for a single payment.
+    // Existing holders keep the plan; it is no longer an open tap.
+    lifetime_founder: { gen_limit: 0, byok_gen_limit: 25000, upscale: 999, ugc: 50, director: true, veo: true, requires_byok: true, watermark: false, templates: 'advanced', bulk: true, commercial: true }
 };
 
 // Backward-compat: map legacy plan names to new ones
@@ -796,6 +802,20 @@ const PLAN_PRICES = {
     hobbyist_ltd: { onetime_usd: 4900 },  // $49
     pro_founder_ltd: { onetime_usd: 9700 },  // $97
     agency_ltd: { onetime_usd: 19700 }   // $197
+};
+
+// Veo is roughly an order of magnitude more expensive per clip than anything
+// else the product generates, and neither Veo route charged credits. Falling
+// back to process.env.GEMINI_API_KEY therefore meant a one-time plan purchase
+// bought unlimited Veo video on the platform's key. Veo is BYOK only: the
+// caller supplies a key or gets a 402.
+function resolveVeoKey(req) {
+    return req.body?.apiKey || req.headers['x-api-key'] || null;
+}
+
+const VEO_KEY_REQUIRED = {
+    error: 'Veo video generation requires your own Gemini API key. Add one in Settings.',
+    code: 'BYOK_REQUIRED'
 };
 
 // Helper: Check plan access
@@ -2070,9 +2090,9 @@ app.post('/api/video/generate', auth.requireAuth, requireGenerateRateLimit, asyn
         // Route Veo requests to the dedicated Veo handler
         if (model === 'veo') {
             // Veo uses Google Gemini API (user's own key)
-            const apiKey = req.body.apiKey || req.headers['x-api-key'] || process.env.GEMINI_API_KEY;
+            const apiKey = resolveVeoKey(req);
             if (!apiKey) {
-                return res.status(403).json({ error: 'Google Veo requires a Gemini API key. Add it in Settings.' });
+                return res.status(402).json(VEO_KEY_REQUIRED);
             }
 
             try {
@@ -2198,9 +2218,9 @@ app.post('/api/video/generate-veo', auth.requireAuth, requireGenerateRateLimit, 
             return res.status(400).json({ error: 'Prompt is required' });
         }
 
-        const apiKey = req.body.apiKey || req.headers['x-api-key'] || process.env.GEMINI_API_KEY;
+        const apiKey = resolveVeoKey(req);
         if (!apiKey) {
-            return res.status(403).json({ error: 'Gemini API key required for Veo video generation.' });
+            return res.status(402).json(VEO_KEY_REQUIRED);
         }
 
         const ai = new GoogleGenAI({ apiKey });
@@ -2462,9 +2482,9 @@ app.post('/api/ugc/render-scene', auth.requireAuth, requireGenerateRateLimit, as
                 return res.status(403).json({ error: `Monthly BYOK limit reached (${planConfig.byok_gen_limit}). Please upgrade for more.` });
             }
 
-            const apiKey = req.body.apiKey || req.headers['x-api-key'] || process.env.GEMINI_API_KEY;
+            const apiKey = resolveVeoKey(req);
             if (!apiKey) {
-                return res.status(403).json({ error: 'Gemini API key required for Veo generation. Save it in Settings.' });
+                return res.status(402).json(VEO_KEY_REQUIRED);
             }
 
             const ai = new GoogleGenAI({ apiKey });
