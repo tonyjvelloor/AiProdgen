@@ -46,6 +46,7 @@ const ProductionEngine = require('./lib/engines/production');
 const { supabaseAdmin, isSupabaseConfigured } = require('./lib/supabase');
 const { getJwtSecret } = require('./lib/jwtSecret');
 const UsageRecorder = require('./lib/usage_recorder');
+const { getUserProviderKey } = require('./lib/userKeys');
 const jwt = require('jsonwebtoken');
 
 // ... (existing code)
@@ -537,7 +538,11 @@ app.post('/api/generate-image', auth.requireAuth, requireVerifiedUser, requireGe
         let apiKey;
 
         // Universal BYOK: all plans can use own key for higher limits
-        const userKey = req.body.apiKey || req.headers['x-api-key'];
+        // A key saved in the vault counts as BYOK just as much as one sent on
+        // the request, so a user who saved theirs is not pushed onto the
+        // platform key (and its tighter free-tier limit) for every call.
+        const userKey = req.body.apiKey || req.headers['x-api-key']
+            || await getUserProviderKey(req.user?.userId, 'gemini');
 
         if (userKey) {
             // User provided their own API key → use BYOK limit
@@ -822,8 +827,12 @@ const PLAN_PRICES = {
 // back to process.env.GEMINI_API_KEY therefore meant a one-time plan purchase
 // bought unlimited Veo video on the platform's key. Veo is BYOK only: the
 // caller supplies a key or gets a 402.
-function resolveVeoKey(req) {
-    return req.body?.apiKey || req.headers['x-api-key'] || null;
+async function resolveVeoKey(req) {
+    const fromRequest = req.body?.apiKey || req.headers['x-api-key'];
+    if (fromRequest) return fromRequest;
+    // Fall back to the key the user saved in the encrypted vault. Never falls
+    // back to a platform key — Veo is customer-funded.
+    return await getUserProviderKey(req.user?.userId, 'gemini');
 }
 
 const VEO_KEY_REQUIRED = {
@@ -2117,7 +2126,7 @@ app.post('/api/video/generate', auth.requireAuth, requireGenerateRateLimit, asyn
         // Route Veo requests to the dedicated Veo handler
         if (model === 'veo') {
             // Veo uses Google Gemini API (user's own key)
-            const apiKey = resolveVeoKey(req);
+            const apiKey = await resolveVeoKey(req);
             if (!apiKey) {
                 return res.status(402).json(VEO_KEY_REQUIRED);
             }
@@ -2196,7 +2205,7 @@ app.post('/api/video/generate', auth.requireAuth, requireGenerateRateLimit, asyn
 // Google Veo Status Polling Endpoint
 app.get('/api/video/veo-status/:operationName', auth.requireAuth, async (req, res) => {
     try {
-        const apiKey = req.query.apiKey || req.headers['x-api-key'] || process.env.GEMINI_API_KEY;
+        const apiKey = await resolveVeoKey(req);
         if (!apiKey) {
             return res.status(403).json({ error: 'API key required to check Veo status' });
         }
@@ -2252,7 +2261,7 @@ app.post('/api/video/generate-veo', auth.requireAuth, requireGenerateRateLimit, 
             return res.status(400).json({ error: 'Prompt is required' });
         }
 
-        const apiKey = resolveVeoKey(req);
+        const apiKey = await resolveVeoKey(req);
         if (!apiKey) {
             return res.status(402).json(VEO_KEY_REQUIRED);
         }
@@ -2522,7 +2531,7 @@ app.post('/api/ugc/render-scene', auth.requireAuth, requireGenerateRateLimit, as
                 return res.status(403).json({ error: `Monthly BYOK limit reached (${planConfig.byok_gen_limit}). Please upgrade for more.` });
             }
 
-            const apiKey = resolveVeoKey(req);
+            const apiKey = await resolveVeoKey(req);
             if (!apiKey) {
                 return res.status(402).json(VEO_KEY_REQUIRED);
             }
@@ -2612,7 +2621,7 @@ app.get('/api/ugc/render-scene/status/:id', auth.requireAuth, async (req, res) =
 
         // If it's a Google Veo Operation ID
         if (id.startsWith('projects/') || id.startsWith('operations/')) {
-            const apiKey = req.query.apiKey || req.headers['x-api-key'] || process.env.GEMINI_API_KEY;
+            const apiKey = await resolveVeoKey(req);
             if (!apiKey) return res.status(403).json({ error: 'API key required for Veo status' });
 
             const ai = new GoogleGenAI({ apiKey });

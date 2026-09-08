@@ -1236,7 +1236,8 @@
                     attempts++;
                     try {
                         let url = `/api/video/veo-status/${encodeURIComponent(operationName)}`;
-                        if (apiKey) url += `?apiKey=${encodeURIComponent(apiKey)}`;
+                        // The server resolves the caller's key from the
+                        // encrypted vault, so it is never put in the URL.
                         const res = await fetch(url, {
                             headers: { 'Authorization': `Bearer ${token}` }
                         });

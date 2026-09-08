@@ -2703,13 +2703,11 @@
             initThumbnails();
             initListeners();
 
-            // Check for API key param in URL (optional convenience)
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.has('key')) {
-                const key = urlParams.get('key');
-                localStorage.setItem('gemini_api_key', key);
-                loadSavedApiKey();
-            }
+            // An API key used to be accepted from ?key= in the URL. Query
+            // strings are recorded in browser history, server logs and
+            // referrer headers, so that convenience leaked the credential it
+            // was accepting. Keys are entered in Settings and stored encrypted
+            // server-side.
         });
 
         function initThumbnails() {
@@ -2815,11 +2813,25 @@
 
         // ============ API Key Management ============
         function loadSavedApiKey() {
-            const savedKey = localStorage.getItem('gemini_api_key');
-            if (savedKey) {
-                userApiKey = savedKey;
-                document.getElementById('apiKeyInput').value = savedKey;
+            // Keys now live server-side encrypted, so there is nothing to load
+            // back into the field. Show a masked hint that one is on file.
+            if (localStorage.getItem('gemini_key_saved') === '1') {
+                const masked = localStorage.getItem('gemini_key_masked') || '';
+                const input = document.getElementById('apiKeyInput');
+                if (input) input.placeholder = masked ? `Saved (${masked})` : 'Saved to your account';
                 updateApiKeyStatus(true);
+                return;
+            }
+
+            // One-time migration for anyone whose key is still in localStorage
+            // from before it was stored server-side.
+            const legacy = localStorage.getItem('gemini_api_key');
+            if (legacy) {
+                userApiKey = legacy;
+                const input = document.getElementById('apiKeyInput');
+                if (input) input.value = legacy;
+                updateApiKeyStatus(true);
+                showApiKeyMessage('Re-save your key to store it securely on your account.', 'info');
             } else {
                 updateApiKeyStatus(false);
             }
@@ -2858,11 +2870,32 @@
                 const data = await res.json();
 
                 if (data.valid) {
-                    localStorage.setItem('gemini_api_key', key);
-                    userApiKey = key;
-                    showApiKeyMessage('✓ API key saved successfully!', 'success');
-                    updateApiKeyStatus(true);
-                    setTimeout(() => closeSettings(), 1500);
+                    // Store the key server-side, AES-256-GCM encrypted, rather
+                    // than leaving it in localStorage where any XSS can read
+                    // it. The server resolves it per request from then on, so
+                    // the browser never needs to hold or send the raw key.
+                    const token = localStorage.getItem('token');
+                    const saved = await fetch('/api/keys/add', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                        body: JSON.stringify({ provider: 'gemini', apiKey: key })
+                    });
+
+                    if (saved.ok) {
+                        const { masked } = await saved.json();
+                        // Only a marker and a masked hint — never the key.
+                        localStorage.setItem('gemini_key_saved', '1');
+                        localStorage.setItem('gemini_key_masked', masked || '');
+                        localStorage.removeItem('gemini_api_key');
+                        userApiKey = '';
+                        showApiKeyMessage('✓ API key saved securely to your account', 'success');
+                        updateApiKeyStatus(true);
+                        setTimeout(() => closeSettings(), 1500);
+                    } else {
+                        const err = await saved.json().catch(() => ({}));
+                        showApiKeyMessage('✗ ' + (err.error || 'Could not save key to your account'), 'error');
+                        updateApiKeyStatus(false);
+                    }
                 } else {
                     showApiKeyMessage('✗ ' + (data.message || 'Invalid API key'), 'error');
                     updateApiKeyStatus(false);
@@ -3333,7 +3366,8 @@
             const pollInterval = setInterval(async () => {
                 try {
                     let url = `/api/video/veo-status/${encodeURIComponent(operationName)}`;
-                    if (apiKey) url += `?apiKey=${encodeURIComponent(apiKey)}`;
+                    // The server resolves the caller's key from the encrypted
+                    // vault, so it is never put in the URL.
                     const res = await fetch(url, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     });

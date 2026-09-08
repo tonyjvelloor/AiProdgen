@@ -12,21 +12,36 @@ const read = (f) => fs.readFileSync(path.join(PUBLIC, f), 'utf8');
 // BYOK-only turned that latent bug into a hard failure. Same shape as
 // credit_transactions.reference_type and the user_keys / user_api_keys split.
 describe('API key storage uses one name', () => {
-    test('no page reads or writes a variant spelling', () => {
+    // Only these three names are legitimate. 'gemini_api_key' survives as a
+    // read for the one-time migration of keys saved before they were stored
+    // server-side; the other two hold a marker and a masked hint, never a key.
+    const ALLOWED = new Set(['gemini_api_key', 'gemini_key_saved', 'gemini_key_masked']);
+
+    test('no page uses a variant spelling', () => {
         const offenders = [];
         for (const page of pages) {
-            for (const m of read(page).matchAll(/localStorage\.(?:get|set)Item\('([^']*[Kk]ey[^']*)'/g)) {
-                if (m[1] !== 'gemini_api_key' && /gemini/i.test(m[1])) {
-                    offenders.push(`${page}: ${m[1]}`);
-                }
+            for (const m of read(page).matchAll(/localStorage\.(?:get|set|remove)Item\('([^']*)'/g)) {
+                if (/gemini/i.test(m[1]) && !ALLOWED.has(m[1])) offenders.push(`${page}: ${m[1]}`);
             }
         }
         assert.deepStrictEqual(offenders, [], `variant API key names: ${offenders.join(', ')}`);
     });
 
-    test('the key is written somewhere, not only read', () => {
-        const writes = pages.filter((p) => read(p).includes("setItem('gemini_api_key'"));
-        assert.ok(writes.length > 0, 'nothing ever saves the key — BYOK would be unusable');
+    // The raw key belongs in the encrypted vault, not in storage any script on
+    // the page can read.
+    test('no page writes the raw key to localStorage', () => {
+        const offenders = pages.filter((p) => read(p).includes("setItem('gemini_api_key'"));
+        assert.deepStrictEqual(offenders, [], `pages storing the raw key: ${offenders.join(', ')}`);
+    });
+
+    test('the key is saved to the encrypted vault', () => {
+        const savers = pages.filter((p) => /fetch\('\/api\/keys\/add'/.test(read(p)));
+        assert.ok(savers.length > 0, 'nothing calls /api/keys/add — the vault would stay unused');
+    });
+
+    test('no page puts a key in a URL', () => {
+        const offenders = pages.filter((p) => /[?&]apiKey=\$\{|urlParams\.get\('key'\)/.test(read(p)));
+        assert.deepStrictEqual(offenders, [], `pages putting a key in a URL: ${offenders.join(', ')}`);
     });
 });
 
