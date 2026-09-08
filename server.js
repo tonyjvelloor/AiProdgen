@@ -1,3 +1,6 @@
+// Load environment before requiring anything that reads process.env at import time.
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
@@ -22,8 +25,6 @@ if (process.env.SENTRY_DSN) {
 
 const { requireLoginRateLimit, requireApiRateLimit, requireGenerateRateLimit, requireEmailVerifyRateLimit } = require('./lib/ratelimit');
 
-require('dotenv').config();
-
 // Import auth and database modules
 const auth = require('./auth');
 const db = require('./database');
@@ -42,7 +43,7 @@ const PhotographyEngine = require('./lib/engines/photography');
 const CommerceEngine = require('./lib/engines/commerce');
 const BlueprintEngine = require('./lib/engines/blueprint');
 const ProductionEngine = require('./lib/engines/production');
-const { supabaseAdmin } = require('./lib/supabase');
+const { supabaseAdmin, isSupabaseConfigured } = require('./lib/supabase');
 
 // ... (existing code)
 
@@ -120,6 +121,24 @@ app.use(cors({
 
 // Rate Limits
 app.use(requireApiRateLimit);
+
+// Deployment diagnostic. Reports which required env vars are present so a
+// misconfigured deploy is visible immediately instead of surfacing as a 500 on
+// every route. Never returns values, only presence.
+app.get('/api/health', (req, res) => {
+    const required = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'JWT_SECRET', 'KEY_ENCRYPTION_SECRET'];
+    const optional = ['GEMINI_API_KEY', 'REPLICATE_API_TOKEN', 'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET'];
+    const missing = required.filter((k) => !process.env[k]);
+
+    res.status(missing.length ? 503 : 200).json({
+        status: missing.length ? 'misconfigured' : 'ok',
+        missingRequiredEnv: missing,
+        presentOptionalEnv: optional.filter((k) => !!process.env[k]),
+        supabaseConfigured: isSupabaseConfigured,
+        nodeEnv: process.env.NODE_ENV || 'development'
+    });
+});
+
 
 
 // ==========================================
