@@ -266,6 +266,19 @@ module.exports = {
     // Sum of what this user's runs have cost the platform in the trailing
     // window. Backs the spend ceiling in PolicyEngine, so a pricing mistake is
     // bounded instead of unbounded.
+    // Status of the workspace a user owns. Returns null when there is no
+    // workspace or the column is absent, which PolicyEngine treats as "do not
+    // block" so an unapplied migration cannot lock everyone out.
+    getWorkspaceStatus: async (userId) => {
+        if (!userId) return null;
+        const { data, error } = await supabaseAdmin.from('workspaces')
+            .select('status')
+            .eq('owner_id', userId)
+            .maybeSingle();
+        if (error || !data) return null;
+        return data.status || null;
+    },
+
     getUserPlatformSpend: async (userId, days = 30) => {
         const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
         const { data, error } = await supabaseAdmin.from('ai_runs')

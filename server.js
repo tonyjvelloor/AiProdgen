@@ -5,6 +5,7 @@ const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
 const emailService = require('./lib/email');
+const { isEmailConfigured } = require('./lib/email');
 const uuidv4 = () => crypto.randomUUID();
 const helmet = require('helmet');
 const compression = require('compression');
@@ -140,6 +141,9 @@ app.get('/api/health', (req, res) => {
         presentOptionalEnv: optional.filter((k) => !!process.env[k]),
         supabaseConfigured: isSupabaseConfigured,
         rateLimitingEnabled: rateLimitingEnabled,
+        // Without this, signup completes but no verification mail is sent, and
+        // requireVerifiedUser then blocks generation for every new account.
+        emailConfigured: isEmailConfigured(),
         nodeEnv: process.env.NODE_ENV || 'development'
     });
 });

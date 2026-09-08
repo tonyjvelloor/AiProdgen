@@ -28,7 +28,9 @@ const COLUMNS = {
     users: ['password_hash', 'is_active', 'is_admin', 'plan', 'billing_cycle', 'monthly_gen_count', 'monthly_ugc_count', 'usage_period_start'],
     credit_transactions: ['source', 'reference_id'],
     // added by migrations/004_usage_attribution.sql
-    ai_runs: ['funded_by']
+    ai_runs: ['funded_by'],
+    // added by migrations/005_workspace_status.sql
+    workspaces: ['status']
 };
 
 let failed = false;
