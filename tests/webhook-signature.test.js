@@ -96,3 +96,18 @@ describe('razorpay webhook signature', () => {
         assert.strictEqual(res.statusCode, 405);
     });
 });
+
+describe('placeholder webhook secrets', () => {
+    // RAZORPAY_WEBHOOK_SECRET=test_secret appeared in a real .env. It was this
+    // file's old hardcoded fallback and is in the git history, so accepting it
+    // would restore the forged-entitlement bypass.
+    for (const placeholder of ['test_secret', 'TEST_SECRET', ' test_secret ', 'changeme']) {
+        test(`refuses to trust ${JSON.stringify(placeholder)}`, async () => {
+            const handler = loadHandler(placeholder);
+            const res = mockRes();
+            await handler(mockReq(payload, sign(payload, placeholder)), res);
+            assert.strictEqual(res.statusCode, 503,
+                'a placeholder secret must be treated as unconfigured');
+        });
+    }
+});

@@ -26,9 +26,18 @@ async function handler(req, res) {
   // Fail closed. Falling back to a placeholder secret would make every
   // signature check pass for anyone who read this file, letting a forged
   // payment.captured event grant paid entitlements for free.
+  // 'test_secret' was this file's hardcoded fallback and is in the git history,
+  // so treating it as a real secret would restore the bypass it caused. Reject
+  // the known placeholders the same way as an unset variable.
+  const PLACEHOLDER_SECRETS = new Set(['test_secret', 'your_webhook_secret', 'changeme']);
+
   const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
-  if (!webhookSecret) {
-    console.error('[config] RAZORPAY_WEBHOOK_SECRET is not set — rejecting webhook.');
+  if (!webhookSecret || PLACEHOLDER_SECRETS.has(webhookSecret.trim().toLowerCase())) {
+    console.error(
+      webhookSecret
+        ? '[config] RAZORPAY_WEBHOOK_SECRET is set to a known placeholder — rejecting webhook.'
+        : '[config] RAZORPAY_WEBHOOK_SECRET is not set — rejecting webhook.'
+    );
     return res.status(503).json({ error: 'Webhook processing is not configured.' });
   }
 
