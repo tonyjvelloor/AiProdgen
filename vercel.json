@@ -1,9 +1,9 @@
 {
   "rewrites": [
-    { "source": "/api/generate", "destination": "/api/generate" },
-    { "source": "/api/generations/(.*)", "destination": "/api/generations/$1" },
-    { "source": "/api/keys/add", "destination": "/api/keys/add" },
-    { "source": "/api/webhooks/razorpay", "destination": "/api/webhooks/razorpay" },
-    { "source": "/api/(.*)", "destination": "/api/index" }
+    {
+      "comment": "Everything under /api that is not its own function file falls through to the Express app in api/index.js. The negative lookahead keeps this rule from swallowing the real functions -- notably the dynamic route api/generations/[id].js, which was being answered by Express's 404 instead.",
+      "source": "/api/(?!index$|generate$|keys/add$|webhooks/razorpay$|generations/).*",
+      "destination": "/api/index"
+    }
   ]
 }
