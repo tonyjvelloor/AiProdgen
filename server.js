@@ -844,6 +844,34 @@ const VEO_KEY_REQUIRED = {
     code: 'BYOK_REQUIRED'
 };
 
+// Turn a provider failure into something the caller can act on. A 401 means
+// the platform's own key is wrong, a 402 means the provider account needs
+// billing -- both are configuration problems, and returning "Failed to start
+// generation" for either sends people looking in the wrong place.
+function providerFailure(res, error, engine) {
+    const status = error && error.providerStatus;
+    if (status === 401 || status === 403) {
+        console.error(`[config] ${engine}: provider rejected the platform API token.`);
+        return res.status(503).json({
+            error: `${engine} is not available: the provider rejected our API token.`,
+            code: 'PROVIDER_AUTH'
+        });
+    }
+    if (status === 402) {
+        console.error(`[config] ${engine}: provider requires billing on the platform account.`);
+        return res.status(503).json({
+            error: `${engine} is not available: the provider account needs billing set up.`,
+            code: 'PROVIDER_BILLING'
+        });
+    }
+    console.error(`${engine} generation error:`, error);
+    return res.status(502).json({
+        error: `${engine} generation failed.`,
+        code: 'PROVIDER_ERROR',
+        detail: error && error.providerDetail ? String(error.providerDetail).slice(0, 200) : undefined
+    });
+}
+
 // Helper: Check plan access
 function getPlanConfig(planName) {
     const resolved = PLAN_ALIASES[planName] || planName;
@@ -2201,8 +2229,7 @@ app.post('/api/video/generate', auth.requireAuth, requireGenerateRateLimit, asyn
         });
 
     } catch (error) {
-        console.error('Video generation error:', error);
-        res.status(500).json({ error: 'Failed to start video generation' });
+        return providerFailure(res, error, 'Video');
     }
 });
 
@@ -2349,8 +2376,7 @@ app.post('/api/image/generate-flux', auth.requireAuth, requireGenerateRateLimit,
         });
 
     } catch (error) {
-        console.error('Flux generation error:', error);
-        res.status(500).json({ error: 'Failed to start Flux generation' });
+        return providerFailure(res, error, 'Flux');
     }
 });
 

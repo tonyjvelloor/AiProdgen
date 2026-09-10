@@ -26,6 +26,17 @@ const FLUX_MODEL_NAME = "flux-schnell";
  * @param {string} model - 'wan' or 'ltx' (default: 'wan')
  * @param {object} options - Optional parameters { endImageUrl, directorMode }
  */
+// Replicate failures were collapsed into a generic 500 by the routes, so a bad
+// token, a missing payment method and a genuine model error were
+// indistinguishable from the outside. Attach the provider's own status and
+// detail to the error so the route can report something actionable.
+function providerError(label, status, detail) {
+    const err = new Error(`Replicate API Error (${label}): ${JSON.stringify(detail)}`);
+    err.providerStatus = status;
+    err.providerDetail = detail && (detail.detail || detail.title || detail.error);
+    return err;
+}
+
 async function generateVideoFromImage(imageUrl, prompt, model = 'wan', options = {}) {
     // MOCK MODE FOR OFFLINE TESTING
     if (process.env.TEST_MODE === 'true') {
@@ -162,7 +173,7 @@ async function generateImageFlux(prompt, aspectRatio = "1:1") {
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(`Replicate API Error (Flux): ${JSON.stringify(error)}`);
+        throw providerError('Flux', response.status, error);
     }
 
     return await response.json();
@@ -208,7 +219,7 @@ async function generateSceneWithFace(faceImageUrl, prompt, options = {}) {
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(`Replicate API Error (InstantID): ${JSON.stringify(error)}`);
+        throw providerError('InstantID', response.status, error);
     }
 
     return await response.json();
