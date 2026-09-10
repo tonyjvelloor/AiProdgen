@@ -848,7 +848,20 @@ const VEO_KEY_REQUIRED = {
 // the platform's own key is wrong, a 402 means the provider account needs
 // billing -- both are configuration problems, and returning "Failed to start
 // generation" for either sends people looking in the wrong place.
-function providerFailure(res, error, engine) {
+async function providerFailure(res, error, engine, refund = null) {
+    // Credits are debited before the provider call, so a provider failure
+    // leaves the user paying for a generation they never received. The V2
+    // engines already reserve/rollback through ExecutionCoordinator; the
+    // legacy routes debited and never refunded.
+    if (refund && refund.userId && refund.credits > 0) {
+        try {
+            await db.rollbackCredits(refund.userId, refund.credits, `${engine}-failed`);
+            console.log(`[credits] refunded ${refund.credits} to ${refund.userId} after ${engine} failure`);
+        } catch (e) {
+            console.error(`[credits] REFUND FAILED for ${refund.userId} after ${engine}:`, e.message);
+        }
+    }
+
     const status = error && error.providerStatus;
     if (status === 401 || status === 403) {
         console.error(`[config] ${engine}: provider rejected the platform API token.`);
@@ -871,6 +884,12 @@ function providerFailure(res, error, engine) {
         detail: error && error.providerDetail ? String(error.providerDetail).slice(0, 200) : undefined
     });
 }
+
+// Credit price per generation. Defined once: these are charged before the
+// provider call and refunded by providerFailure if it fails, and the two must
+// never drift apart.
+const FLUX_COST = 2;
+const VIDEO_COST = 5;
 
 // Helper: Check plan access
 function getPlanConfig(planName) {
@@ -2206,7 +2225,6 @@ app.post('/api/video/generate', auth.requireAuth, requireGenerateRateLimit, asyn
 
         // LTX / Wan models use Replicate
         // Verify credit balance
-        let VIDEO_COST = 5;
         const userCredits = await db.getUserCredits(user.userId);
         if (userCredits < VIDEO_COST) {
             return res.status(402).json({ error: 'Insufficient credits', required: VIDEO_COST, current: userCredits });
@@ -2229,7 +2247,7 @@ app.post('/api/video/generate', auth.requireAuth, requireGenerateRateLimit, asyn
         });
 
     } catch (error) {
-        return providerFailure(res, error, 'Video');
+        return await providerFailure(res, error, 'Video', { userId: req.user?.userId, credits: VIDEO_COST });
     }
 });
 
@@ -2347,7 +2365,6 @@ app.post('/api/image/generate-flux', auth.requireAuth, requireGenerateRateLimit,
         }
 
         // Flux Cost (2 credits)
-        const FLUX_COST = 2;
         const userCredits = await db.getUserCredits(user.userId);
 
         if (userCredits < FLUX_COST) {
@@ -2376,7 +2393,7 @@ app.post('/api/image/generate-flux', auth.requireAuth, requireGenerateRateLimit,
         });
 
     } catch (error) {
-        return providerFailure(res, error, 'Flux');
+        return await providerFailure(res, error, 'Flux', { userId: req.user?.userId, credits: FLUX_COST });
     }
 });
 
