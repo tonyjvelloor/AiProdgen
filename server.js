@@ -1,5 +1,7 @@
-// Load environment before requiring anything that reads process.env at import time.
-require('dotenv').config();
+// Sentry must initialise before anything else is required so its
+// instrumentation can patch modules as they load. instrument.js also loads
+// dotenv, so environment is available to every import below.
+const { sentryEnabled } = require('./instrument');
 
 const express = require('express');
 const cors = require('cors');
@@ -10,19 +12,6 @@ const uuidv4 = () => crypto.randomUUID();
 const helmet = require('helmet');
 const compression = require('compression');
 const Sentry = require('@sentry/node');
-
-// Initialize Sentry before anything else
-if (process.env.SENTRY_DSN) {
-    Sentry.init({
-        dsn: process.env.SENTRY_DSN,
-        integrations: [],
-        environment: process.env.NODE_ENV || 'development',
-        release: process.env.npm_package_version || '1.0.0',
-        tracesSampleRate: 1.0, 
-        profilesSampleRate: 1.0,
-    });
-    console.log("Sentry initialized.");
-}
 
 const { requireLoginRateLimit, requireApiRateLimit, requireGenerateRateLimit, requireEmailVerifyRateLimit, rateLimitingEnabled } = require('./lib/ratelimit');
 
@@ -74,11 +63,6 @@ if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-// The request handler must be the first middleware on the app
-if (process.env.SENTRY_DSN) {
-    Sentry.setupExpressErrorHandler(app);
-}
 
 // Middleware
 // Security headers
@@ -144,6 +128,7 @@ app.get('/api/health', (req, res) => {
         // Without this, signup completes but no verification mail is sent, and
         // requireVerifiedUser then blocks generation for every new account.
         emailConfigured: isEmailConfigured(),
+        errorReporting: sentryEnabled,
         nodeEnv: process.env.NODE_ENV || 'development'
     });
 });
@@ -2848,6 +2833,23 @@ app.put('/api/products/:id/primary-output', auth.requireAuth, async (req, res) =
         console.error(error);
         res.status(500).json({ error: error.message });
     }
+});
+
+// Sentry's Express integration is an ERROR handler, so it has to come after
+// every controller. It was previously registered immediately after the app was
+// created, ahead of all 69 routes, which meant no route error ever reached it.
+if (sentryEnabled) {
+    Sentry.setupExpressErrorHandler(app);
+}
+
+// Fallthrough handler. Returns the Sentry event id so a user can quote it in a
+// support request, and never leaks a stack trace to the client.
+app.use((err, req, res, next) => {
+    console.error('Unhandled error:', err);
+    res.status(err.status || 500).json({
+        error: 'Internal server error',
+        reference: res.sentry || undefined
+    });
 });
 
 // Start the Server

@@ -8,6 +8,8 @@
 //
 // An Express app is already a (req, res) handler, so it can be exported as-is.
 try {
+    // Before ../server, so Sentry patches modules as they load.
+    require('../instrument');
     const app = require('../server');
     module.exports = app;
 } catch (e) {
