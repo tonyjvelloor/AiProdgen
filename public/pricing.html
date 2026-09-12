@@ -18,6 +18,14 @@
             }
         }
     </script>
+    <!-- This page advertised INR 999 / 2,999 / 7,999 -- prices that exist nowhere
+         in the server config -- and its purchase button was an alert() with a
+         comment saying Razorpay "would" be integrated. It is linked from
+         about, features, faq and the dashboard, so customers reached it and
+         could not buy. Redirect to the pricing section that has a working
+         checkout until this page is rebuilt against the real plans. -->
+    <meta http-equiv="refresh" content="0; url=/landing.html#pricing">
+    <script>window.location.replace('/landing.html#pricing');</script>
 </head>
 <body class="bg-gray-50 font-sans min-h-screen flex flex-col">
     <!-- Navbar -->

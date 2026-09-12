@@ -110,17 +110,20 @@
 
         async function loadContent() {
             try {
-                // In Week 2, we will fetch real data:
-                // const res = await fetch('/api/workspace/outputs', { headers: { 'Authorization': `Bearer ${token}` } });
-                // rawData = await res.json();
-                
-                // MOCK DATA for Week 1.5 Polish UI
-                rawData = [
-                    { id: '1', product_name: 'Running Shoes', engine: 'photography', collection_name: 'Studio Pack 1', storage_path: 'https://placehold.co/400x400/blue/white?text=Photo+1' },
-                    { id: '2', product_name: 'Running Shoes', engine: 'photography', collection_name: 'Studio Pack 1', storage_path: 'https://placehold.co/400x400/blue/white?text=Photo+2' },
-                    { id: '3', product_name: 'Coffee Maker', engine: 'original_upload', collection_name: 'Original', storage_path: 'https://placehold.co/400x400/gray/white?text=Original' },
-                    { id: '4', product_name: 'Running Shoes', engine: 'marketplace', collection_name: 'Amazon Hero', storage_path: 'https://placehold.co/400x400/orange/white?text=Amazon' },
-                ];
+                // This shipped with four hardcoded placeholder items -- "Running
+                // Shoes", "Coffee Maker" and placehold.co images -- so every
+                // user saw the same fake library. Now reads the real workspace.
+                const res = await fetch('/api/workspace/outputs', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (res.status === 401) {
+                    window.location.href = '/login.html';
+                    return;
+                }
+                if (!res.ok) throw new Error('Failed to load content');
+
+                rawData = await res.json();
 
                 document.getElementById('loadingOutputs').classList.add('hidden');
                 

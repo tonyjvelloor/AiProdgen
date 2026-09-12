@@ -870,6 +870,21 @@ async function providerFailure(res, error, engine, refund = null) {
     });
 }
 
+// Prices the lifetime-deal checkout is allowed to charge, per currency.
+//
+// /api/payment/create-order took `amount` straight from the request body and
+// passed it to Razorpay, and /api/payment/verify only checked the signature --
+// which is valid for whatever amount was ordered. Anyone could POST
+// {email, amount: 1} and receive a full lifetime account for one dollar.
+//
+// Two values are allowed per currency because landing.html advertises $47 and
+// index.html advertises $49. That inconsistency should be resolved, but
+// rejecting one of them here would break a live checkout page.
+const LIFETIME_OFFER_PRICES = {
+    USD: [47, 49],
+    INR: [3999]
+};
+
 // Credit price per generation. Defined once: these are charged before the
 // provider call and refunded by providerFailure if it fails, and the two must
 // never drift apart.
@@ -1965,14 +1980,25 @@ app.post('/api/payment/create-order', async (req, res) => {
             return res.status(400).json({ error: 'Email is required' });
         }
 
+        // The client does not get to name its own price.
+        const allowed = LIFETIME_OFFER_PRICES[currency];
+        if (!allowed) {
+            return res.status(400).json({ error: `Unsupported currency: ${currency}` });
+        }
+        if (amount !== undefined && !allowed.includes(Number(amount))) {
+            console.error(`[payments] rejected order for ${email}: ${currency} ${amount} is not an offered price.`);
+            return res.status(400).json({ error: 'Invalid amount for the selected offer.' });
+        }
+
         // Check if email already registered
         if (await db.emailExists(email)) {
             return res.status(400).json({ error: 'Email already registered. Please login instead.' });
         }
 
-        // Create Razorpay order (amount in smallest currency unit: cents or paise)
-        // Default to $47 if no amount provided (safe default for prod)
-        const amountValue = amount || 47;
+        // Create Razorpay order (amount in smallest currency unit: cents or paise).
+        // Falls back to the first allowed price for the currency rather than a
+        // hardcoded 47, which was wrong for any non-USD order.
+        const amountValue = amount !== undefined ? Number(amount) : allowed[0];
         const amountInSmallestUnit = Math.round(amountValue * 100);
 
         const order = await razorpay.orders.create({
@@ -2785,6 +2811,35 @@ app.post('/api/products/:id/jobs/campaign_production', auth.requireAuth, async (
         console.error(error);
         if (error.status === 403) return res.status(403).json({ error: error.message });
         res.status(500).json({ error: error.message });
+    }
+});
+
+// Everything this workspace has produced, for the Content Hub.
+// OutputService.getWorkspaceOutputs already existed; the route never did, so
+// content-library.html shipped with four hardcoded placeholder items and a
+// comment saying real data would come "in Week 2".
+app.get('/api/workspace/outputs', auth.requireAuth, async (req, res) => {
+    try {
+        const workspace = await WorkspaceService.getOrCreateWorkspace(req.user.userId);
+        const outputs = await OutputService.getWorkspaceOutputs(workspace.id);
+
+        // Flatten the joined product so the client does not depend on the
+        // shape of the Supabase embed.
+        res.json((outputs || []).map((o) => ({
+            id: o.id,
+            product_id: o.product_id,
+            product_name: o.products ? o.products.name : 'Untitled product',
+            collection_id: o.collection_id,
+            engine: o.engine || 'original_upload',
+            format: o.format,
+            type: o.type,
+            status: o.status,
+            storage_path: o.storage_path,
+            created_at: o.created_at
+        })));
+    } catch (error) {
+        console.error('Workspace outputs error:', error);
+        res.status(500).json({ error: 'Failed to load content' });
     }
 });
 

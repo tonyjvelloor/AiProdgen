@@ -119,7 +119,9 @@
             
             // Fetch credits
             try {
-                const res = await fetch('/api/user/credits', {
+                // Was /api/user/credits, which the server has never had, so the
+                // balance silently stayed at 0.
+                const res = await fetch('/api/credits/balance', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.ok) {

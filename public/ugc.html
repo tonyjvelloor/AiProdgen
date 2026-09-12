@@ -1360,8 +1360,11 @@
                 const token = localStorage.getItem('token');
                 const apiKey = localStorage.getItem('gemini_api_key');
 
-                let apiEndpoint = '/api/video/generate-ltx';
-                let payload = { imageUrl, prompt: nd.data.motionPrompt };
+                // Was /api/video/generate-ltx, which does not exist. The real
+                // route is /api/video/generate and it selects the model from
+                // the payload.
+                let apiEndpoint = '/api/video/generate';
+                let payload = { imageUrl, prompt: nd.data.motionPrompt, model: 'ltx' };
 
                 if (nd.data.videoModel === 'veo') {
                     apiEndpoint = '/api/ugc/render-scene';
