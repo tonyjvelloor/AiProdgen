@@ -38,6 +38,7 @@ const { getJwtSecret } = require('./lib/jwtSecret');
 const UsageRecorder = require('./lib/usage_recorder');
 const { getUserProviderKey } = require('./lib/userKeys');
 const entitlements = require('./lib/entitlements');
+const referrals = require('./lib/referrals');
 const jwt = require('jsonwebtoken');
 
 // ... (existing code)
@@ -1228,13 +1229,23 @@ app.post('/api/plan/verify', auth.requireAuth, async (req, res) => {
             .catch(e => console.error('[entitlements] seed failed on plan verify:', e.message));
 
         const planPrice = PLAN_PRICES[planId] || {};
+        const planAmountCents = planPrice.onetime_usd || planPrice[`${billingCycle}_inr`] || 0;
+        const planCurrency = planPrice.onetime_usd ? 'USD' : 'INR';
         await db.recordPayment({
             paymentId: razorpay_payment_id, orderId: razorpay_order_id,
             userId: user.id, email: user.email,
             kind: 'plan', planId,
-            amount: planPrice.onetime_usd || planPrice[`${billingCycle}_inr`] || 0,
-            currency: planPrice.onetime_usd ? 'USD' : 'INR'
+            amount: planAmountCents,
+            currency: planCurrency
         });
+
+        // Partner Program (Release D): a no-op unless this user was referred
+        // and this plan is commissionable (agency_ltd/hobbyist_ltd today).
+        // Never blocks the purchase response on a commission-ledger issue.
+        await referrals.recordEligiblePayment({
+            userId: user.id, paymentId: razorpay_payment_id, orderId: razorpay_order_id,
+            kind: 'plan', planId, grossAmountCents: planAmountCents, currency: planCurrency
+        }).catch(e => console.error('[referrals] commission recording failed on plan verify:', e.message));
 
         console.log(`✅ Plan activated: ${planId} (${billingCycle}) for ${user.email}`);
 
@@ -2151,6 +2162,16 @@ app.post('/api/payment/verify', async (req, res) => {
                 kind: 'plan', planId: purchasedPlanId,
                 amount: pendingOrder.amount, currency: pendingOrder.currency || 'USD'
             });
+
+            // Partner Program (Release D): a no-op today until signup-time
+            // attribution capture exists (referrals.attributeReferral is not
+            // yet called from any registration path) -- wired here now so
+            // that piece is the only thing left before this is live end to
+            // end, rather than a second pass through every payment site.
+            await referrals.recordEligiblePayment({
+                userId: newUser.id, paymentId: razorpay_payment_id, orderId: razorpay_order_id,
+                kind: 'plan', planId: purchasedPlanId, grossAmountCents: pendingOrder.amount, currency: pendingOrder.currency || 'USD'
+            }).catch(e => console.error('[referrals] commission recording failed on lifetime purchase:', e.message));
         } else {
             console.error(`[payment] could not find newly created user ${pendingOrder.email} to activate their plan`);
         }

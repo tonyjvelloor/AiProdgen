@@ -1,6 +1,7 @@
 // api/webhooks/razorpay.js
 const crypto = require('crypto');
 const entitlements = require('../../lib/entitlements');
+const referrals = require('../../lib/referrals');
 
 
 
@@ -92,6 +93,17 @@ async function handler(req, res) {
       await entitlements.revokeEntitlementByReference(payment.id);
     } catch (e) {
       console.error('[webhook] entitlement revoke-on-refund failed:', e.message);
+    }
+    // Test 3/4 (Partner Program acceptance criteria): a refund before the
+    // hold window clears reverses the commission; a refund after it's paid
+    // is left alone and counted for manual clawback (see reverseCommissionsForPayment).
+    try {
+      const { reversed, needsClawback } = await referrals.reverseCommissionsForPayment(payment.id);
+      if (reversed || needsClawback) {
+        console.log(`[webhook] payment ${payment.id} refunded: ${reversed} commission(s) reversed, ${needsClawback} need manual clawback.`);
+      }
+    } catch (e) {
+      console.error('[webhook] commission reversal failed:', e.message);
     }
   }
 
