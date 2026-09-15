@@ -1978,7 +1978,14 @@ app.post('/api/auth/signup', requireLoginRateLimit, async (req, res) => {
         // confirmed new account -- never for a visitor who merely carried a
         // ?ref= code without signing up. A no-op if referralCode is absent,
         // invalid, self-referential, or this user already has an attribution.
-        referrals.attributeReferral({ referralCode, referredUserId: user.id })
+        //
+        // Must be awaited, not fire-and-forget: this handler's environment
+        // can be frozen the instant res.json() below returns (this is a
+        // Vercel serverless function, not a long-running process), which
+        // silently abandons an in-flight, unawaited write. Verified this
+        // exact failure mode against production -- an unawaited call here
+        // returned 200 but never created the referrals row.
+        await referrals.attributeReferral({ referralCode, referredUserId: user.id })
             .catch(e => console.error('[referrals] attribution failed on signup:', e.message));
 
         // Track Lead (New Signup)
@@ -2039,7 +2046,10 @@ app.post('/api/auth/google', async (req, res) => {
 
             // Partner Program: only a genuinely new account can be attributed
             // -- an existing Google user signing back in never reaches here.
-            referrals.attributeReferral({ referralCode, referredUserId: user.id })
+            // Awaited for the same reason as /api/auth/signup: an unawaited
+            // write here is not guaranteed to finish before Vercel freezes
+            // this function's execution.
+            await referrals.attributeReferral({ referralCode, referredUserId: user.id })
                 .catch(e => console.error('[referrals] attribution failed on google signup:', e.message));
 
             // Track Lead

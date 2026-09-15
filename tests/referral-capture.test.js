@@ -65,6 +65,23 @@ describe('signup routes accept and use referralCode', () => {
             assert.ok(body.includes('referralCode'), `${route} must read referralCode from the request`);
             assert.ok(body.includes('referrals.attributeReferral'), `${route} must attribute it on a new account`);
         });
+
+        // Regression: an unawaited attributeReferral() in /api/auth/signup
+        // and /api/auth/google returned 200 in production but never wrote
+        // the referrals row -- Vercel can freeze a function's execution the
+        // instant its response is sent, abandoning an in-flight,
+        // fire-and-forget promise. Caught by testing against the real
+        // deployment, not by the local suite (a long-running node:http
+        // server never cuts off an unawaited promise, so this passed
+        // locally the whole time).
+        test(`${route} awaits attributeReferral rather than firing it and forgetting`, () => {
+            const start = server.indexOf(route);
+            const end = server.indexOf("app.post(", start + 10);
+            const body = server.slice(start, end === -1 ? start + 3000 : end);
+            const callIndex = body.indexOf('referrals.attributeReferral');
+            const precedingText = body.slice(Math.max(0, callIndex - 10), callIndex);
+            assert.ok(/await\s*$/.test(precedingText), `${route} must await referrals.attributeReferral(), not fire-and-forget it`);
+        });
     }
 
     test('/api/plan/verify (an upgrade, not a signup) does NOT attribute -- only records against an existing referral', () => {
