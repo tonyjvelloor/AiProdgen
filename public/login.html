@@ -2,6 +2,7 @@
 <html lang="en">
 
 <head>
+    <script src="/js/referral.js"></script>
     <!-- Meta Pixel Code -->
     <script>
         !function (f, b, e, v, n, t, s) {
@@ -224,10 +225,11 @@
             const endpoint = currentMode === 'login' ? '/api/auth/login' : '/api/auth/signup';
 
             try {
+                const referralCode = currentMode === 'signup' && window.AIP_REFERRAL ? window.AIP_REFERRAL.code() : null;
                 const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password })
+                    body: JSON.stringify(referralCode ? { email, password, referralCode } : { email, password })
                 });
 
                 const data = await response.json();
@@ -312,7 +314,7 @@
                 const res = await fetch('/api/auth/google', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ credential: response.credential })
+                    body: JSON.stringify({ credential: response.credential, referralCode: window.AIP_REFERRAL ? window.AIP_REFERRAL.code() : null })
                 });
 
                 const data = await res.json();

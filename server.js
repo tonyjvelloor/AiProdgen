@@ -960,6 +960,41 @@ app.get('/api/entitlements', auth.requireAuth, async (req, res) => {
     }
 });
 
+// Partner Program (Release D6). Deliberately just two reads -- a code/link
+// to share, and a balance summary. No payout-request route yet: payouts are
+// manual V1 (see lib/referrals.js), so there is nothing for a partner to
+// trigger here.
+app.get('/api/referral/code', auth.requireAuth, async (req, res) => {
+    try {
+        const user = await db.getUserByEmail(req.user.email);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        const code = await referrals.getOrCreateReferralCode(user.id);
+        res.json({
+            code,
+            url: `${process.env.APP_URL || 'https://www.aiprodgen.online'}/?ref=${code}`
+        });
+    } catch (error) {
+        console.error('❌ Get referral code error:', error.message);
+        res.status(500).json({ error: 'Failed to get referral code' });
+    }
+});
+
+app.get('/api/referral/summary', auth.requireAuth, async (req, res) => {
+    try {
+        const user = await db.getUserByEmail(req.user.email);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        const summary = await referrals.getPartnerSummary(user.id);
+        res.json(summary);
+    } catch (error) {
+        console.error('❌ Get referral summary error:', error.message);
+        res.status(500).json({ error: 'Failed to get referral summary' });
+    }
+});
+
 // Create order for credit purchase
 app.post('/api/credits/purchase', auth.requireAuth, async (req, res) => {
     try {
@@ -1916,7 +1951,7 @@ app.post('/api/auth/resend-verification', requireEmailVerifyRateLimit, async (re
 // Signup Endpoint (Freemium)
 app.post('/api/auth/signup', requireLoginRateLimit, async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { email, password, referralCode } = req.body;
 
         if (!email || !password) {
             return res.status(400).json({ error: 'Email and password are required' });
@@ -1939,6 +1974,12 @@ app.post('/api/auth/signup', requireLoginRateLimit, async (req, res) => {
             { expiresIn: '7d' }
         );
 
+        // Partner Program: attribution is established only now, at a
+        // confirmed new account -- never for a visitor who merely carried a
+        // ?ref= code without signing up. A no-op if referralCode is absent,
+        // invalid, self-referential, or this user already has an attribution.
+        referrals.attributeReferral({ referralCode, referredUserId: user.id })
+            .catch(e => console.error('[referrals] attribution failed on signup:', e.message));
 
         // Track Lead (New Signup)
         const { ip, userAgent, fbp, fbc } = getClientInfo(req);
@@ -1972,7 +2013,7 @@ app.post('/api/auth/google', async (req, res) => {
             return res.status(500).json({ error: 'Google login not configured' });
         }
 
-        const { credential } = req.body;
+        const { credential, referralCode } = req.body;
         if (!credential) {
             return res.status(400).json({ error: 'Missing Google credential' });
         }
@@ -1995,6 +2036,11 @@ app.post('/api/auth/google', async (req, res) => {
             const randomPassword = auth.generatePassword();
             await auth.registerFreeUser(email, randomPassword);
             user = await db.getUserByEmail(email);
+
+            // Partner Program: only a genuinely new account can be attributed
+            // -- an existing Google user signing back in never reaches here.
+            referrals.attributeReferral({ referralCode, referredUserId: user.id })
+                .catch(e => console.error('[referrals] attribution failed on google signup:', e.message));
 
             // Track Lead
             const { ip, userAgent, fbp, fbc } = getClientInfo(req);
@@ -2102,7 +2148,7 @@ app.post('/api/payment/create-order', async (req, res) => {
 // Verify Payment and Create User
 app.post('/api/payment/verify', async (req, res) => {
     try {
-        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature, referralCode } = req.body;
 
         if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
             return res.status(400).json({ error: 'Missing payment details' });
@@ -2143,6 +2189,13 @@ app.post('/api/payment/verify', async (req, res) => {
         // templates) that come with it.
         const newUser = await db.getUserByEmail(pendingOrder.email);
         if (newUser) {
+            // Partner Program: attribution is established only now, at a
+            // confirmed new account, and before recordEligiblePayment (below)
+            // looks for it -- order matters, since that lookup only sees an
+            // attribution that already exists.
+            await referrals.attributeReferral({ referralCode, referredUserId: newUser.id })
+                .catch(e => console.error('[referrals] attribution failed on lifetime purchase:', e.message));
+
             const purchasedPlanId = 'hobbyist_ltd';
             await db.setUserPlan(newUser.id, purchasedPlanId, 'lifetime');
             const purchasedPlanConfig = getPlanConfig(purchasedPlanId);
@@ -2163,11 +2216,8 @@ app.post('/api/payment/verify', async (req, res) => {
                 amount: pendingOrder.amount, currency: pendingOrder.currency || 'USD'
             });
 
-            // Partner Program (Release D): a no-op today until signup-time
-            // attribution capture exists (referrals.attributeReferral is not
-            // yet called from any registration path) -- wired here now so
-            // that piece is the only thing left before this is live end to
-            // end, rather than a second pass through every payment site.
+            // Records a commission if attributeReferral (above) found an
+            // active referral for this user.
             await referrals.recordEligiblePayment({
                 userId: newUser.id, paymentId: razorpay_payment_id, orderId: razorpay_order_id,
                 kind: 'plan', planId: purchasedPlanId, grossAmountCents: pendingOrder.amount, currency: pendingOrder.currency || 'USD'

@@ -2,6 +2,7 @@
 <html lang="en">
 
 <head>
+    <script src="/js/referral.js"></script>
     <!-- Google Search Console verification. The DNS TXT route was not
          available: Hostinger would not accept a second TXT record on the
          apex alongside the existing SPF record, and overwriting SPF would
@@ -1474,7 +1475,8 @@
                             body: JSON.stringify({
                                 razorpay_order_id: response.razorpay_order_id,
                                 razorpay_payment_id: response.razorpay_payment_id,
-                                razorpay_signature: response.razorpay_signature
+                                razorpay_signature: response.razorpay_signature,
+                                referralCode: window.AIP_REFERRAL ? window.AIP_REFERRAL.code() : null
                             })
                         });
 
