@@ -37,6 +37,7 @@ const { supabaseAdmin, isSupabaseConfigured } = require('./lib/supabase');
 const { getJwtSecret } = require('./lib/jwtSecret');
 const UsageRecorder = require('./lib/usage_recorder');
 const { getUserProviderKey } = require('./lib/userKeys');
+const entitlements = require('./lib/entitlements');
 const jwt = require('jsonwebtoken');
 
 // ... (existing code)
@@ -925,6 +926,31 @@ app.get('/api/credits/packages', async (req, res) => {
     res.json(CREDIT_PACKAGES);
 });
 
+// A user's active feature grants (bulk/commercial/watermark-removal/...),
+// independent of their credit balance -- see lib/entitlements.js. The
+// frontend uses this to decide what to show as "unlocked" vs. "buy this".
+app.get('/api/entitlements', auth.requireAuth, async (req, res) => {
+    try {
+        const user = await db.getUserByEmail(req.user.email);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        const grants = await entitlements.getUserEntitlements(user.id);
+        res.json({
+            features: grants.map(g => g.feature),
+            grants: grants.map(g => ({
+                feature: g.feature,
+                source: g.source,
+                remaining: g.remaining_quantity,
+                expires_at: g.expires_at
+            }))
+        });
+    } catch (error) {
+        console.error('❌ Get entitlements error:', error.message);
+        res.status(500).json({ error: 'Failed to get entitlements' });
+    }
+});
+
 // Create order for credit purchase
 app.post('/api/credits/purchase', auth.requireAuth, async (req, res) => {
     try {
@@ -1186,6 +1212,12 @@ app.post('/api/plan/verify', auth.requireAuth, async (req, res) => {
         const planConfig = getPlanConfig(planId);
         await db.initUserCredits(user.id);
         await db.addCredits(user.id, planConfig.upscale);
+
+        // Re-derive feature grants (bulk/commercial/watermark-removal/
+        // templates) from the plan just activated. Additive and idempotent --
+        // does not touch credits or BYOK, only which paid features unlock.
+        await entitlements.seedPlanEntitlements(user.id, planId, planConfig)
+            .catch(e => console.error('[entitlements] seed failed on plan verify:', e.message));
 
         const planPrice = PLAN_PRICES[planId] || {};
         await db.recordPayment({
@@ -2083,6 +2115,37 @@ app.post('/api/payment/verify', async (req, res) => {
             pendingOrder.amount, // Pass amount (in smallest unit)
             pendingOrder.currency // Pass currency
         );
+
+        // createUser() never set a plan, so every $47 lifetime buyer landed on
+        // the `users.plan` column's default -- free_explorer (20 BYOK gens/mo)
+        // -- despite paying for the lifetime offer. This is that offer's paid
+        // tier: activate it the same way /api/plan/verify does for an in-app
+        // upgrade, including the feature grants (bulk/commercial/watermark/
+        // templates) that come with it.
+        const newUser = await db.getUserByEmail(pendingOrder.email);
+        if (newUser) {
+            const purchasedPlanId = 'hobbyist_ltd';
+            await db.setUserPlan(newUser.id, purchasedPlanId, 'lifetime');
+            const purchasedPlanConfig = getPlanConfig(purchasedPlanId);
+            await db.initUserCredits(newUser.id);
+            await db.addCredits(newUser.id, purchasedPlanConfig.upscale);
+            await entitlements.seedPlanEntitlements(newUser.id, purchasedPlanId, purchasedPlanConfig)
+                .catch(e => console.error('[entitlements] seed failed on lifetime purchase:', e.message));
+
+            // This is the primary acquisition offer -- the highest-volume
+            // revenue path -- but unlike the credit-pack and in-app-upgrade
+            // routes it never wrote to the revenue ledger, so getRevenue()
+            // and the admin cost-coverage dashboard undercounted actual
+            // revenue for every lifetime signup.
+            await db.recordPayment({
+                paymentId: razorpay_payment_id, orderId: razorpay_order_id,
+                userId: newUser.id, email: newUser.email,
+                kind: 'plan', planId: purchasedPlanId,
+                amount: pendingOrder.amount, currency: pendingOrder.currency || 'USD'
+            });
+        } else {
+            console.error(`[payment] could not find newly created user ${pendingOrder.email} to activate their plan`);
+        }
 
         // Delete pending order
         await db.deletePendingOrder(razorpay_order_id);

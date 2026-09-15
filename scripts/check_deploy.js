@@ -20,7 +20,9 @@ const TABLES = [
     // added by migrations/002_async_job_ownership.sql
     'async_jobs',
     // added by migrations/003_revenue_ledger.sql
-    'payments'
+    'payments',
+    // added by migrations/006_entitlements.sql
+    'entitlements'
 ];
 
 // Columns the code writes that the original Supabase schema never had.
@@ -74,6 +76,22 @@ const ok = (m) => console.log(`  ok    ${m}`);
     for (const t of TABLES) {
         const { error } = await supabaseAdmin.from(t).select('*').limit(0);
         if (error) { missing.push(t); bad(`${t} — ${error.message}`); } else ok(t);
+    }
+
+    console.log('\nFunctions');
+    try {
+        // consume_entitlement backs the concurrency-safety guarantee in
+        // lib/entitlements.js -- a plain PGRST202 (function not found) means
+        // the migration's SQL function never got created, even if the table
+        // did. A nonexistent user/feature is expected to just return false.
+        const { error } = await supabaseAdmin.rpc('consume_entitlement', {
+            p_user_id: '00000000-0000-0000-0000-000000000000', p_feature: '__check_deploy_probe__', p_amount: 1
+        });
+        if (error) { missing.push('consume_entitlement()'); bad(`consume_entitlement() — ${error.message}`); }
+        else ok('consume_entitlement()');
+    } catch (e) {
+        missing.push('consume_entitlement()');
+        bad(`consume_entitlement() — ${e.message}`);
     }
 
     console.log('\nColumns');

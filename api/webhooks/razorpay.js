@@ -1,6 +1,6 @@
 // api/webhooks/razorpay.js
 const crypto = require('crypto');
-const { supabaseAdmin } = require('../../lib/supabase');
+const entitlements = require('../../lib/entitlements');
 
 
 
@@ -52,19 +52,46 @@ async function handler(req, res) {
 
   const event = JSON.parse(rawBody.toString());
 
+  // This originally upserted into `user_entitlements`, a table nothing ever
+  // read from -- a feature-unlock purchase notified via webhook granted
+  // nothing any route could check. It now grants through the same
+  // entitlements module the synchronous purchase-verify routes use.
+  // grantEntitlement's own dedupe (source='purchase' keyed by reference_id =
+  // payment id) makes this safe against Razorpay's at-least-once delivery:
+  // a retried payment.captured for the same payment grants nothing twice.
   if (event.event === 'payment.captured') {
     const payment = event.payload.payment.entity;
-    const { user_id, product_id } = payment.notes;
+    const { user_id, product_id, quantity } = payment.notes || {};
 
-    const { error } = await supabaseAdmin.from('user_entitlements').upsert(
-      { user_id, product_id, razorpay_payment_id: payment.id },
-      { onConflict: 'user_id,product_id', ignoreDuplicates: true }
-    );
+    if (!user_id || !product_id) {
+      console.error(`[webhook] payment.captured ${payment.id} has no user_id/product_id in notes -- nothing to grant`);
+    } else {
+      try {
+        await entitlements.grantEntitlement({
+          userId: user_id,
+          feature: product_id,
+          source: 'purchase',
+          referenceId: payment.id,
+          quantity: quantity ? parseInt(quantity, 10) : null
+        });
+      } catch (e) {
+        console.error('[webhook] entitlement grant failed:', e.message);
+        // Still return 200 so Razorpay doesn't retry endlessly on a DB
+        // hiccup -- log this for manual reconciliation instead.
+      }
+    }
+  }
 
-    if (error) {
-      console.error('Entitlement grant failed:', error);
-      // Still return 200 so Razorpay doesn't retry endlessly on a DB hiccup —
-      // log this for manual reconciliation instead.
+  // Razorpay fires this on the original payment when it's refunded (in full
+  // or in part). A refunded purchase must not leave the feature it bought
+  // still unlocked -- revoking by payment id needs no trust in this event's
+  // own notes, since reference_id was set to the payment id at grant time.
+  if (event.event === 'payment.refunded') {
+    const payment = event.payload.payment.entity;
+    try {
+      await entitlements.revokeEntitlementByReference(payment.id);
+    } catch (e) {
+      console.error('[webhook] entitlement revoke-on-refund failed:', e.message);
     }
   }
 
