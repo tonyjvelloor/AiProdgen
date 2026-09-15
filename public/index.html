@@ -1355,7 +1355,7 @@
                 class="bg-white text-indigo-700 px-6 py-2 md:px-8 md:py-3 rounded-full font-black text-sm md:text-lg shadow-lg hover:bg-gray-100 hover:scale-105 transition-all whitespace-nowrap">
                 Start Free →
             </a>
-            <span class="text-white/70 text-xs hidden md:inline">Lifetime access from $49</span>
+            <span class="text-white/70 text-xs hidden md:inline">Lifetime access from $47</span>
         </div>
     </div>
 
@@ -1411,8 +1411,11 @@
         };
 
         // Price mapping for fixed values (better than auto-calc for psychological pricing)
+        // offer.USD was 49 here vs 47 on landing.html (the page '/' actually
+        // serves) — same lifetime deal, two different advertised prices.
+        // Matched to landing.html's $47, which is the price ad traffic sees.
         const PRICES = {
-            offer: { USD: 49, INR: 3999 },
+            offer: { USD: 47, INR: 3999 },
             original: { USD: 297, INR: 24999 },
             savings_mo: { USD: 4800, INR: 400000 },
             competitor_canva_mo: { USD: 15, INR: 1299 },

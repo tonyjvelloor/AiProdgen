@@ -6,11 +6,24 @@ const EventRequest = bizSdk.EventRequest;
 const UserData = bizSdk.UserData;
 const ServerEvent = bizSdk.ServerEvent;
 
-const access_token = 'EAAWakQGCDXoBQlkO3pFttf2voZCBzuo5ILNSZA7Ar9ZCjKDfjMrZByzIZCXbZCAxsZBhaQjnq287bsd2EI9zEXIZAFjAQ8EWJP0dQZAzGZCin1tjrR8nsoXnvBXqdDTMiXoYI0hXv7gvfGi98yxRr6BL2BFiTUhbD1bvI3ckR0XLxNZAHPYBGoNfCptUx9snEHNbAZDZD';
-const pixel_id = '4190907814571632';
-const api = bizSdk.FacebookAdsApi.init(access_token);
+// This file used to have a live Facebook Conversions API access token and
+// pixel ID hardcoded directly in source, present since the very first commit.
+// The repository is now public, which made that token visible to anyone --
+// exactly the credential used to send Purchase/Lead events, so it could be
+// used to fire fake conversions and corrupt the signal Meta uses to optimize
+// ad spend. There is no fallback here on purpose: silently no-op'ing with a
+// wrong default would look identical to working while reporting nothing.
+const access_token = process.env.FB_ACCESS_TOKEN;
+const pixel_id = process.env.FB_PIXEL_ID;
+const currentUrl = process.env.APP_URL || 'https://www.aiprodgen.online';
 
-let currentUrl = 'https://aiprodgen.online'; // Default URL
+const isConfigured = !!(access_token && pixel_id);
+
+if (isConfigured) {
+    bizSdk.FacebookAdsApi.init(access_token);
+} else if (process.env.NODE_ENV === 'production') {
+    console.warn('[facebook] FB_ACCESS_TOKEN / FB_PIXEL_ID not set — server-side conversion events are not being sent.');
+}
 
 const logError = (error) => {
     console.error('Facebook CAPI Error:', error.response ? error.response.data : error.message);
@@ -33,6 +46,8 @@ const createUserData = (userEmail, clientIp, userAgent, fbp, fbc) => {
 };
 
 const sendEvent = (eventName, userData, customData = {}, eventSourceUrl) => {
+    if (!isConfigured) return Promise.resolve(null);
+
     const serverEvent = new ServerEvent()
         .setEventName(eventName)
         .setEventTime(Math.floor(new Date() / 1000))
@@ -56,6 +71,8 @@ const sendEvent = (eventName, userData, customData = {}, eventSourceUrl) => {
 };
 
 module.exports = {
+    isConfigured,
+
     trackLead: async (userEmail, clientIp, userAgent, fbp, fbc) => {
         try {
             const userData = createUserData(userEmail, clientIp, userAgent, fbp, fbc);

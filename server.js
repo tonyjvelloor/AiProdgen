@@ -116,7 +116,7 @@ app.use(requireApiRateLimit);
 // every route. Never returns values, only presence.
 app.get('/api/health', (req, res) => {
     const required = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'JWT_SECRET', 'KEY_ENCRYPTION_SECRET'];
-    const optional = ['GEMINI_API_KEY', 'REPLICATE_API_TOKEN', 'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET'];
+    const optional = ['GEMINI_API_KEY', 'REPLICATE_API_TOKEN', 'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET', 'FB_ACCESS_TOKEN', 'FB_PIXEL_ID'];
     const missing = required.filter((k) => !process.env[k]);
 
     res.status(missing.length ? 503 : 200).json({
@@ -129,6 +129,9 @@ app.get('/api/health', (req, res) => {
         // requireVerifiedUser then blocks generation for every new account.
         emailConfigured: isEmailConfigured(),
         errorReporting: sentryEnabled,
+        // Server-side Purchase/Lead events (Conversions API) will silently not
+        // send without this, which is easy to miss right when ad spend starts.
+        adTrackingConfigured: fb.isConfigured,
         nodeEnv: process.env.NODE_ENV || 'development'
     });
 });
@@ -877,11 +880,11 @@ async function providerFailure(res, error, engine, refund = null) {
 // which is valid for whatever amount was ordered. Anyone could POST
 // {email, amount: 1} and receive a full lifetime account for one dollar.
 //
-// Two values are allowed per currency because landing.html advertises $47 and
-// index.html advertises $49. That inconsistency should be resolved, but
-// rejecting one of them here would break a live checkout page.
+// landing.html and index.html advertised different prices ($47 vs $49) for
+// the same offer; both now show $47, so $49 was removed rather than kept as a
+// second valid amount indefinitely.
 const LIFETIME_OFFER_PRICES = {
-    USD: [47, 49],
+    USD: [47],
     INR: [3999]
 };
 
@@ -1088,19 +1091,32 @@ app.post('/api/plan/subscribe', auth.requireAuth, async (req, res) => {
             return res.status(500).json({ error: 'Razorpay not configured' });
         }
 
-        const { planId, billingCycle = 'monthly', currency = 'INR' } = req.body;
+        const { planId: rawPlanId, billingCycle = 'monthly', currency = 'INR' } = req.body;
+
+        // app.html sends the display aliases ('creator', 'pro', 'agency') that
+        // getPlanConfig() already resolves through PLAN_ALIASES for gating, but
+        // this route looked those keys up in PLAN_PRICES directly -- which only
+        // has the canonical keys ('hobbyist_ltd', 'pro_founder_ltd',
+        // 'agency_ltd'). Every upgrade attempt 400'd before an order was ever
+        // created; nobody could actually subscribe.
+        const planId = PLAN_ALIASES[rawPlanId] || rawPlanId;
         const prices = PLAN_PRICES[planId];
 
         if (!prices) {
             return res.status(400).json({ error: 'Invalid plan. Choose creator, pro, or agency.' });
         }
 
-        const useCurrency = (currency === 'USD') ? 'USD' : 'INR';
-        const priceKey = `${billingCycle}_${useCurrency.toLowerCase()}`;
-        const amount = prices[priceKey];
+        // PLAN_PRICES only defines a one-time USD price for these lifetime
+        // plans -- there is no monthly/yearly split and no INR price on record.
+        // The old code built the key as `${billingCycle}_${currency}` (e.g.
+        // "monthly_inr"), which can never match `onetime_usd`, so this always
+        // failed too. Rather than invent an INR conversion that isn't this
+        // code's decision to make, charge the real USD price and say so.
+        const useCurrency = 'USD';
+        const amount = prices.onetime_usd;
 
         if (!amount) {
-            return res.status(400).json({ error: 'Invalid billing cycle' });
+            return res.status(400).json({ error: 'This plan has no price configured.' });
         }
 
         const order = await razorpay.orders.create({
@@ -1132,7 +1148,7 @@ app.post('/api/plan/subscribe', auth.requireAuth, async (req, res) => {
 // Verify plan payment
 app.post('/api/plan/verify', auth.requireAuth, async (req, res) => {
     try {
-        const { razorpay_order_id, razorpay_payment_id, razorpay_signature, planId, billingCycle = 'monthly' } = req.body;
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature, planId: rawPlanId, billingCycle = 'monthly' } = req.body;
 
         if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
             return res.status(400).json({ error: 'Missing payment details' });
@@ -1149,6 +1165,11 @@ app.post('/api/plan/verify', auth.requireAuth, async (req, res) => {
             return res.status(400).json({ error: 'Invalid payment signature' });
         }
 
+        // Same alias mismatch as /api/plan/subscribe: app.html sends 'creator',
+        // not 'hobbyist_ltd'. Resolve it the same way here so a successful
+        // payment doesn't fail at the activation step right after Razorpay has
+        // already been charged.
+        const planId = PLAN_ALIASES[rawPlanId] || rawPlanId;
         if (!PLAN_PRICES[planId]) {
             return res.status(400).json({ error: 'Invalid plan' });
         }
