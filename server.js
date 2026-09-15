@@ -799,7 +799,15 @@ const PLANS = {
     // Infinity here meant the `monthly_gen_count >= byok_gen_limit` guards never
     // fired, so runaway use had no signal. A high finite ceiling behaves the
     // same for real customers and still trips on abuse.
-    agency_ltd: { gen_limit: 0, byok_gen_limit: 25000, upscale: 200, ugc: 50, director: true, veo: true, requires_byok: true, watermark: false, templates: 'advanced', bulk: true, commercial: true },
+    // agency_license (Agency Reseller V2, Release B): a separate entitlement
+    // key from `commercial`/`commercial_license` -- the right to sell client
+    // deliverables (agency_license) and the right to use outputs commercially
+    // (commercial_license) are kept distinct so either can be sold on its own
+    // later. upscale (the starter-credit allotment, added to the shared
+    // credit ledger via db.addCredits at plan activation) drops from 200 to
+    // 120: still enough to demonstrate the workflow, deliberately not framed
+    // as the product itself -- the license is, per the spec's positioning.
+    agency_ltd: { gen_limit: 0, byok_gen_limit: 25000, upscale: 120, ugc: 50, director: true, veo: true, requires_byok: true, watermark: false, templates: 'advanced', bulk: true, commercial: true, agency_license: true, priority: true },
     // Was the only plan with requires_byok: false and gen_limit: Infinity —
     // unlimited generation on the platform's own key, for a single payment.
     // Existing holders keep the plan; it is no longer an open tap.

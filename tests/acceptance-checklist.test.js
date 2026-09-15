@@ -103,7 +103,7 @@ describe('acceptance checklist', { skip }, () => {
             assert.strictEqual(rows.length, 1, 're-verifying the same plan must not create a second active grant');
         });
 
-        test('upgrade to agency_ltd grants bulk and commercial', async () => {
+        test('upgrade to agency_ltd grants the full Agency Reseller V2 bundle', async () => {
             const orderId = `order_upgrade_${Date.now()}`, paymentId = `pay_upgrade_${Date.now()}`;
             const res = await appHarness.request('POST', '/api/plan/verify', sessionFor(user),
                 JSON.stringify({ razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: sign(orderId, paymentId), planId: 'agency', billingCycle: 'monthly' }));
@@ -112,6 +112,8 @@ describe('acceptance checklist', { skip }, () => {
             assert.strictEqual((await db.getUserPlan(user.id)).plan, 'agency_ltd');
             assert.strictEqual(await entitlements.hasFeature(user.id, entitlements.FEATURES.BULK_GENERATION), true);
             assert.strictEqual(await entitlements.hasFeature(user.id, entitlements.FEATURES.COMMERCIAL_LICENSE), true);
+            assert.strictEqual(await entitlements.hasFeature(user.id, entitlements.FEATURES.AGENCY_LICENSE), true, 'the reseller/client right must be granted separately from commercial_license');
+            assert.strictEqual(await entitlements.hasFeature(user.id, entitlements.FEATURES.PRIORITY_QUEUE), true, 'granted honestly even though nothing enforces it yet');
         });
 
         test('a separately-purchased feature is granted (standing in for a future Bulk Studio checkout)', async () => {
@@ -128,6 +130,8 @@ describe('acceptance checklist', { skip }, () => {
             assert.strictEqual((await db.getUserPlan(user.id)).plan, 'hobbyist_ltd');
             assert.strictEqual(await entitlements.hasFeature(user.id, entitlements.FEATURES.BULK_GENERATION), false, 'the plan no longer on the account must not still grant bulk');
             assert.strictEqual(await entitlements.hasFeature(user.id, entitlements.FEATURES.COMMERCIAL_LICENSE), false);
+            assert.strictEqual(await entitlements.hasFeature(user.id, entitlements.FEATURES.AGENCY_LICENSE), false, 'hobbyist_ltd does not include the reseller right');
+            assert.strictEqual(await entitlements.hasFeature(user.id, entitlements.FEATURES.PRIORITY_QUEUE), false);
             assert.strictEqual(await entitlements.hasFeature(user.id, entitlements.FEATURES.WATERMARK_REMOVAL), true, 'hobbyist_ltd still includes this one');
             assert.strictEqual(await entitlements.hasFeature(user.id, entitlements.FEATURES.FACE_CONSISTENCY), true, 'a purchased feature must survive a plan change in either direction');
         });

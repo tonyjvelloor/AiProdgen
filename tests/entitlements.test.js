@@ -34,6 +34,30 @@ describe('plan activation seeds feature entitlements', () => {
     });
 });
 
+// Agency Reseller V2, Release B. agency_license is a distinct right from
+// commercial_license (§04/§08 of the spec) -- confirm the bundle and the
+// backfill for pre-existing holders both exist.
+describe('agency_ltd carries the Agency Reseller V2 bundle', () => {
+    const entitlements = require('../lib/entitlements');
+
+    test('AGENCY_LICENSE is a known feature, separate from COMMERCIAL_LICENSE', () => {
+        assert.strictEqual(entitlements.FEATURES.AGENCY_LICENSE, 'agency_license');
+        assert.notStrictEqual(entitlements.FEATURES.AGENCY_LICENSE, entitlements.FEATURES.COMMERCIAL_LICENSE);
+    });
+
+    test('PLANS.agency_ltd grants agency_license and priority, and caps starter credits at 120', () => {
+        const start = server.indexOf('agency_ltd: {');
+        const line = server.slice(start, server.indexOf('\n', start));
+        assert.ok(line.includes('agency_license: true'), 'agency_ltd must include the reseller right');
+        assert.ok(line.includes('priority: true'), 'agency_ltd must include priority (granted honestly, unenforced)');
+        assert.ok(line.includes('upscale: 120'), 'starter credits must be the bounded 120, not the old 200');
+    });
+
+    test('a backfill script exists for holders who bought before this bundle existed', () => {
+        assert.ok(fs.existsSync(path.join(__dirname, '..', 'scripts', 'backfill_agency_license.js')));
+    });
+});
+
 describe('entitlements module shape', () => {
     const entitlements = require('../lib/entitlements');
     test('exports the expected surface', () => {
