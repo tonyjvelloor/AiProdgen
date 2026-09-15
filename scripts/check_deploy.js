@@ -22,12 +22,16 @@ const TABLES = [
     // added by migrations/003_revenue_ledger.sql
     'payments',
     // added by migrations/006_entitlements.sql
-    'entitlements'
+    'entitlements',
+    // added by migrations/007_referrals_commissions.sql
+    'referrals', 'commissions'
 ];
 
 // Columns the code writes that the original Supabase schema never had.
 const COLUMNS = {
-    users: ['password_hash', 'is_active', 'is_admin', 'plan', 'billing_cycle', 'monthly_gen_count', 'monthly_ugc_count', 'usage_period_start'],
+    users: ['password_hash', 'is_active', 'is_admin', 'plan', 'billing_cycle', 'monthly_gen_count', 'monthly_ugc_count', 'usage_period_start',
+        // added by migrations/007_referrals_commissions.sql
+        'referral_code'],
     credit_transactions: ['source', 'reference_id'],
     // added by migrations/004_usage_attribution.sql
     ai_runs: ['funded_by'],
