@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIProdGen - Partner Program</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: { primary: '#2563eb', secondary: '#1e40af' }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 font-sans min-h-screen flex flex-col">
+    <nav class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-40">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="/app.html" class="text-xl font-bold text-gray-900 flex items-center gap-2">
+                        <span class="text-primary">✨</span>
+                        AIProdGen
+                    </a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/app.html" class="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors">Back to App</a>
+                    <button onclick="logout()" class="text-gray-500 hover:text-gray-900 text-sm transition-colors">Logout</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="flex-grow max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-10">
+        <div class="mb-10">
+            <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold tracking-wide uppercase mb-3">
+                🤝 Partner Program
+            </div>
+            <h1 class="text-2xl font-bold text-gray-900 tracking-tight">Refer businesses. Earn from their AIProdGen subscription.</h1>
+            <p class="text-gray-500 mt-1 text-sm max-w-xl">Send someone your link. If they become a paying customer, you earn a commission -- 20% on their first purchase, 10% on eligible recurring purchases for 12 months.</p>
+        </div>
+
+        <div id="loadingState" class="text-center py-16 text-gray-400">Loading your partner account&hellip;</div>
+
+        <div id="content" class="hidden space-y-6">
+            <!-- 1. Referral link -->
+            <div class="bg-white rounded-xl border border-gray-200 p-6">
+                <h2 class="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    🔗 Your Partner Link
+                </h2>
+                <div class="flex flex-col sm:flex-row gap-2">
+                    <input id="referralUrl" type="text" readonly
+                        class="flex-1 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-700 font-mono">
+                    <button onclick="copyLink()" id="copyBtn"
+                        class="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-blue-600 transition-colors whitespace-nowrap">
+                        📋 <span id="copyBtnLabel">Copy Link</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2 & 3. Referrals + earnings -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-white rounded-xl border border-gray-200 p-5">
+                    <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Referred</div>
+                    <div class="text-2xl font-bold text-gray-900" id="referredCount">0</div>
+                </div>
+                <div class="bg-white rounded-xl border border-gray-200 p-5">
+                    <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Pending</div>
+                    <div class="text-2xl font-bold text-amber-600" id="pendingAmount">$0.00</div>
+                </div>
+                <div class="bg-white rounded-xl border border-gray-200 p-5">
+                    <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Available</div>
+                    <div class="text-2xl font-bold text-emerald-600" id="availableAmount">$0.00</div>
+                </div>
+                <div class="bg-white rounded-xl border border-gray-200 p-5">
+                    <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Paid</div>
+                    <div class="text-2xl font-bold text-gray-900" id="paidAmount">$0.00</div>
+                </div>
+            </div>
+            <p class="text-xs text-gray-400 -mt-3">Pending commissions clear a 30-day hold (to cover refunds) before becoming available.</p>
+
+            <!-- 4. Payout -->
+            <div class="bg-white rounded-xl border border-gray-200 p-6">
+                <h2 class="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                    💵 Get Paid
+                </h2>
+                <div class="flex items-baseline gap-2 mb-1">
+                    <span class="text-sm text-gray-500">Available balance:</span>
+                    <span class="text-lg font-bold text-gray-900" id="payoutAvailable">$0.00</span>
+                </div>
+                <div class="text-xs text-gray-400 mb-4">Minimum payout: $25.00 &middot; paid manually, by bank transfer, UPI or PayPal</div>
+                <a id="requestPayoutBtn" href="#"
+                    class="hidden inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors">
+                    📨 Request Payout
+                </a>
+                <p id="payoutBlockedMsg" class="hidden text-sm text-gray-500">$25.00 minimum required before a payout can be requested.</p>
+            </div>
+        </div>
+
+        <div id="errorState" class="hidden text-center py-16">
+            <p class="text-gray-500">Couldn't load your partner account. <button onclick="location.reload()" class="text-primary font-medium">Try again</button></p>
+        </div>
+    </main>
+
+    <script>
+        function formatCents(cents, currency) {
+            const amount = (cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            return currency === 'INR' ? `₹${amount}` : `$${amount}`;
+        }
+
+        function logout() {
+            localStorage.removeItem('token');
+            window.location.href = '/login.html';
+        }
+
+        async function copyLink() {
+            const input = document.getElementById('referralUrl');
+            try {
+                await navigator.clipboard.writeText(input.value);
+            } catch (e) {
+                input.select();
+                document.execCommand('copy');
+            }
+            const label = document.getElementById('copyBtnLabel');
+            label.innerText = 'Copied!';
+            setTimeout(() => { label.innerText = 'Copy Link'; }, 2000);
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                window.location.href = '/login.html';
+                return;
+            }
+
+            try {
+                const headers = { 'Authorization': `Bearer ${token}` };
+                const [codeRes, summaryRes] = await Promise.all([
+                    fetch('/api/referral/code', { headers }),
+                    fetch('/api/referral/summary', { headers })
+                ]);
+                if (!codeRes.ok || !summaryRes.ok) throw new Error('request failed');
+
+                const codeData = await codeRes.json();
+                const summary = await summaryRes.json();
+
+                document.getElementById('referralUrl').value = codeData.url;
+
+                const referredCount = Object.values(summary.referralCounts || {}).reduce((a, b) => a + b, 0);
+                document.getElementById('referredCount').innerText = referredCount;
+                document.getElementById('pendingAmount').innerText = formatCents(summary.pendingCents, 'USD');
+                document.getElementById('availableAmount').innerText = formatCents(summary.availableCents, 'USD');
+                document.getElementById('paidAmount').innerText = formatCents(summary.paidCents, 'USD');
+                document.getElementById('payoutAvailable').innerText = formatCents(summary.availableCents, 'USD');
+
+                // Payout is manual in V1 -- there is no automated rail, so
+                // "Request Payout" opens a pre-filled email rather than
+                // pretending to trigger a transfer.
+                if (summary.payoutEligible) {
+                    const subject = encodeURIComponent('AIProdGen Partner payout request');
+                    const body = encodeURIComponent(
+                        `Requesting payout for my Partner Program balance.\n\n` +
+                        `Referral code: ${codeData.code}\n` +
+                        `Available balance: ${formatCents(summary.availableCents, 'USD')}\n\n` +
+                        `Please let me know what payout details you need (bank transfer / UPI / PayPal).`
+                    );
+                    document.getElementById('requestPayoutBtn').href = `mailto:support@aiprodgen.com?subject=${subject}&body=${body}`;
+                    document.getElementById('requestPayoutBtn').classList.remove('hidden');
+                } else {
+                    document.getElementById('payoutBlockedMsg').classList.remove('hidden');
+                }
+
+                document.getElementById('loadingState').classList.add('hidden');
+                document.getElementById('content').classList.remove('hidden');
+            } catch (e) {
+                console.error(e);
+                document.getElementById('loadingState').classList.add('hidden');
+                document.getElementById('errorState').classList.remove('hidden');
+            }
+        });
+    </script>
+</body>
+</html>

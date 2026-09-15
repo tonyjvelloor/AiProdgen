@@ -269,4 +269,32 @@ describe('Partner Program acceptance tests', { skip }, () => {
         assert.strictEqual(summary.payoutEligible, true, `$${summary.availableCents / 100} must clear the $25 minimum`);
         assert.strictEqual(summary.availableCents, 980 + 3940);
     });
+
+    // Regression: getPartnerSummary used to sum commission_amount across
+    // currencies into one number, even though MIN_PAYOUT_CENTS is already
+    // currency-specific -- an INR commission (the $47 offer accepts INR)
+    // would have inflated a USD total by roughly 80x.
+    test('an INR commission does not inflate the USD balance or its own eligibility', async () => {
+        const partnerA = await makeUser('t10b-partner');
+        const customerB = await makeUser('t10b-customer');
+        const code = await referrals.getOrCreateReferralCode(partnerA.id);
+        await referrals.attributeReferral({ referralCode: code, referredUserId: customerB.id });
+
+        // hobbyist_ltd via the INR-priced $47 offer: 3999 INR -> commission
+        // at 20% is 79980 paise (Rs.799.80) -- large in raw cents, but far
+        // below the Rs.2,00,000 (Rs.2,000) INR minimum, and must never be
+        // read as if it were 79980 USD cents.
+        const inr = await referrals.recordEligiblePayment({
+            userId: customerB.id, paymentId: `pay_t10b_inr_${Date.now()}`, orderId: `order_t10b_${Date.now()}`,
+            kind: 'plan', planId: 'hobbyist_ltd', grossAmountCents: 399900, currency: 'INR'
+        });
+        await supabaseAdmin.from('commissions').update({ status: 'available' }).eq('id', inr.id);
+
+        const summary = await referrals.getPartnerSummary(partnerA.id);
+        assert.strictEqual(summary.availableCents, 0, 'the top-level USD figure must not include the INR commission');
+        assert.strictEqual(summary.payoutEligible, false);
+        assert.ok(summary.byCurrency.INR, 'the INR commission must appear in its own bucket');
+        assert.strictEqual(summary.byCurrency.INR.availableCents, 79980);
+        assert.strictEqual(summary.byCurrency.INR.payoutEligible, false, 'Rs.799.80 is below the Rs.2,000 INR minimum');
+    });
 });
