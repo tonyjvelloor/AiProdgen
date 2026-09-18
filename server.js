@@ -72,7 +72,12 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com", "https://cdnjs.cloudflare.com", "https://checkout.razorpay.com", "https://connect.facebook.net", "https://cdn.jsdelivr.net"],
+            // cdn.razorpay.com: checkout.razorpay.com's own widget loads a
+            // risk-detection sub-script from here on every checkout. Without
+            // it in the allowlist, the CSP silently blocked it sitewide --
+            // payments still succeeded, but Razorpay's fraud-signal
+            // collection never ran.
+            scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com", "https://cdnjs.cloudflare.com", "https://checkout.razorpay.com", "https://cdn.razorpay.com", "https://connect.facebook.net", "https://cdn.jsdelivr.net"],
             scriptSrcAttr: ["'unsafe-inline'"],
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdn.jsdelivr.net"],
             fontSrc: ["'self'", "https://fonts.gstatic.com"],
