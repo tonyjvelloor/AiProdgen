@@ -81,8 +81,16 @@ app.use(helmet({
             scriptSrcAttr: ["'unsafe-inline'"],
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdn.jsdelivr.net"],
             fontSrc: ["'self'", "https://fonts.gstatic.com"],
-            imgSrc: ["'self'", "data:", "blob:", "https://www.facebook.com"],
-            connectSrc: ["'self'", "https://api.razorpay.com", "https://www.facebook.com"],
+            // grainy-gradients.vercel.app: decorative noise texture behind
+            // the Director Mode demo card on index.html -- was silently
+            // blocked, rendering the card without its background texture.
+            imgSrc: ["'self'", "data:", "blob:", "https://www.facebook.com", "https://grainy-gradients.vercel.app"],
+            // ipapi.co: index.html's currency auto-detection fetches this on
+            // load to pick INR vs USD by visitor country. Blocked by CSP, it
+            // silently fell into the timezone-based fallback every time --
+            // same UX for most visitors, but wrong for e.g. an Indian
+            // visitor on a non-IST-configured device or a VPN.
+            connectSrc: ["'self'", "https://api.razorpay.com", "https://www.facebook.com", "https://ipapi.co"],
             frameSrc: ["https://api.razorpay.com", "https://www.facebook.com", "https://www.youtube.com", "https://youtube.com"],
         },
     },
