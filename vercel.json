@@ -1,4 +1,8 @@
 {
+  "redirects": [
+    { "source": "/pricing.html", "destination": "/index.html#pricing", "permanent": false },
+    { "source": "/landing_vanilla.html", "destination": "/landing.html", "permanent": false }
+  ],
   "rewrites": [
     { "source": "/api/generations/:id", "destination": "/api/generations/[id]?id=:id" },
     { "source": "/api/(.*)", "destination": "/api/index" }

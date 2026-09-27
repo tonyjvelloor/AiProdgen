@@ -13,12 +13,6 @@
         <priority>0.8</priority>
     </url>
     <url>
-        <loc>https://aiprodgen.online/pricing.html</loc>
-        <lastmod>2026-02-23</lastmod>
-        <changefreq>daily</changefreq>
-        <priority>0.5</priority> <!-- Changed from 0.8 to 0.5 -->
-    </url>
-    <url>
         <loc>https://aiprodgen.online/features.html</loc>
         <lastmod>2026-02-23</lastmod>
         <changefreq>weekly</changefreq>
