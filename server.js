@@ -1297,11 +1297,11 @@ app.post('/api/plan/verify', auth.requireAuth, async (req, res) => {
 
         console.log(`✅ Plan activated: ${planId} (${billingCycle}) for ${user.email}`);
 
-        // Track purchase
+        // Report the amount actually charged. This used to read
+        // PLAN_PRICES[plan][`${billingCycle}_inr`], a key that doesn't exist,
+        // so every in-app upgrade was sent to Meta as value NaN in INR.
         const { ip, userAgent, fbp, fbc } = getClientInfo(req);
-        const prices = PLAN_PRICES[planId];
-        const purchaseAmount = prices[`${billingCycle}_inr`] / 100;
-        fb.trackPurchase(req.user.email, purchaseAmount, 'INR', razorpay_order_id, ip, userAgent, fbp, fbc).catch(e => console.error(e));
+        fb.trackPurchase(req.user.email, planAmountCents / 100, planCurrency, razorpay_order_id, ip, userAgent, fbp, fbc).catch(e => console.error(e));
 
         res.json({
             success: true,
