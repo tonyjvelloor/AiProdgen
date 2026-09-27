@@ -1975,19 +1975,7 @@
                 </button>
             </div>
 
-            <!-- Billing Toggle -->
-            <div class="flex items-center justify-center gap-4 mb-6">
-                <span id="billingLabelMonthly" class="text-sm font-semibold text-white">Monthly</span>
-                <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" id="billingToggle" class="sr-only peer" onchange="toggleBillingCycle()">
-                    <div
-                        class="w-14 h-7 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-green-500 peer-checked:to-emerald-500">
-                    </div>
-                </label>
-                <span id="billingLabelYearly" class="text-sm font-medium text-slate-400">Yearly</span>
-                <span class="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-full font-bold animate-pulse">SAVE
-                    50%</span>
-            </div>
+            <p class="text-center text-sm text-slate-400 mb-6">One-time payment. Lifetime access. No subscription.</p>
 
             <!-- Plans Grid -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -2004,11 +1992,10 @@
                     <p class="text-xs text-slate-400 mb-4">Lifetime Hobbyist access
                     </p>
                     <ul class="space-y-2 text-sm text-slate-300">
-                        <li class="flex items-center gap-2"><span class="text-green-400">✓</span> 60 Photo Gens/mo</li>
-                        <li class="flex items-center gap-2"><span class="text-green-400">✓</span> 20 HD Upscale Credits
-                        </li>
+                        <li class="flex items-center gap-2"><span class="text-green-400">✓</span> 500 Photo Gens/mo</li>
                         <li class="flex items-center gap-2"><span class="text-green-400">✓</span> Fashion Mode</li>
                         <li class="flex items-center gap-2"><span class="text-green-400">✓</span> No Watermark</li>
+                        <li class="flex items-center gap-2 text-slate-500"><span>✗</span> Included upscale credits</li>
                         <li class="flex items-center gap-2 text-slate-500"><span>✗</span> UGC Video Studio</li>
                         <li class="flex items-center gap-2 text-slate-500"><span>✗</span> Google Veo Video</li>
                     </ul>
@@ -2029,14 +2016,14 @@
                     <p class="text-xs text-slate-400 mb-4">Lifetime Pro Founder access
                     </p>
                     <ul class="space-y-2 text-sm text-slate-300">
-                        <li class="flex items-center gap-2"><span class="text-green-400">✓</span> 250 Photo Gens/mo</li>
-                        <li class="flex items-center gap-2"><span class="text-green-400">✓</span> 100 Upscale Credits
+                        <li class="flex items-center gap-2"><span class="text-green-400">✓</span> 3,000 Photo Gens/mo</li>
+                        <li class="flex items-center gap-2"><span class="text-green-400">✓</span> 50 HD Upscale Credits
                         </li>
                         <li class="flex items-center gap-2"><span class="text-green-400">✓</span> Fashion Mode</li>
                         <li class="flex items-center gap-2"><span class="text-green-400">✓</span> No Watermark</li>
                         <li class="flex items-center gap-2"><span class="text-yellow-400">★</span> UGC Video (10/mo)
                         </li>
-                        <li class="flex items-center gap-2 text-slate-500"><span>✗</span> Google Veo Video</li>
+                        <li class="flex items-center gap-2"><span class="text-yellow-400">★</span> Google Veo Video (your key)</li>
                     </ul>
                 </div>
 
@@ -2054,7 +2041,7 @@
                     <ul class="space-y-2 text-sm text-slate-300">
                         <li class="flex items-center gap-2"><span class="text-green-400">✓</span> Agency commercial license — sell to clients
                         </li>
-                        <li class="flex items-center gap-2"><span class="text-green-400">✓</span> Bulk generation + premium templates
+                        <li class="flex items-center gap-2"><span class="text-green-400">✓</span> Bulk upscaling + premium templates
                         </li>
                         <li class="flex items-center gap-2"><span class="text-green-400">✓</span> Watermark-free exports</li>
                         <li class="flex items-center gap-2"><span class="text-green-400">✓</span> Starter AI credits included</li>
@@ -2071,8 +2058,8 @@
                     <span class="text-2xl">🆓</span>
                     <div>
                         <p class="text-sm font-semibold text-white">Currently on Free Plan</p>
-                        <p class="text-xs text-slate-400">You can generate unlimited photos with your own Gemini API
-                            key. Upgrade to unlock HD upscaling, UGC Studio, and more.</p>
+                        <p class="text-xs text-slate-400">You can generate 20 photos a month with your own Gemini API
+                            key. Upgrade for more generations, HD upscale credits, UGC Studio, and more.</p>
                     </div>
                 </div>
             </div>
@@ -2127,8 +2114,6 @@
                 document.getElementById('currencyFlag').textContent = config.flag;
                 document.getElementById('currencyCode').textContent = currentCurrency;
             }
-
-            // Plan pricing handled by toggleBillingCycle()
         }
 
         function formatPrice(amount, currency) {
@@ -3762,44 +3747,14 @@
 
         // ============ Plan Subscription System ============
         let selectedPlan = 'pro'; // Default selection
-        let billingCycle = 'monthly';
+        // Every plan is a one-time lifetime purchase; the server charges
+        // PLAN_PRICES[plan].onetime_usd regardless of this value.
+        const billingCycle = 'lifetime';
 
-        const PLAN_PRICING = {
-            monthly: { creator: '$49', pro: '$97', agency: '$197' },
-            yearly: { creator: '$49', pro: '$97', agency: '$197' }
-        };
-        const PLAN_BILLED = { creator: 'One-time', pro: 'One-time', agency: 'One-time' };
+        const PLAN_PRICING = { creator: '$49', pro: '$97', agency: '$197' };
         const PLAN_LABELS = { creator: '⭐ Creator', pro: '🔥 Pro', agency: '🚀 Agency' };
 
         let currentUserPlan = 'free'; // Set by auth check
-
-        function toggleBillingCycle() {
-            const toggle = document.getElementById('billingToggle');
-            billingCycle = toggle.checked ? 'yearly' : 'monthly';
-
-            // Update toggle label styles
-            document.getElementById('billingLabelMonthly').className = toggle.checked
-                ? 'text-sm font-medium text-slate-400' : 'text-sm font-semibold text-white';
-            document.getElementById('billingLabelYearly').className = toggle.checked
-                ? 'text-sm font-semibold text-white' : 'text-sm font-medium text-slate-400';
-
-            // Update prices
-            ['creator', 'pro', 'agency'].forEach(plan => {
-                const priceEl = document.getElementById(`price-${plan}`);
-                if (priceEl) {
-                    const suffix = billingCycle === 'monthly' ? '/mo' : '/mo';
-                    priceEl.innerHTML = `${PLAN_PRICING[billingCycle][plan]}<span class="text-sm font-normal text-slate-400">${billingCycle === 'monthly' ? '/mo' : ''}</span>`;
-                }
-            });
-
-            // Show/hide "Billed Annually" text
-            document.querySelectorAll('.billed-annually-text').forEach(el => {
-                el.style.display = billingCycle === 'yearly' ? 'block' : 'none';
-            });
-
-            // Update purchase button
-            updatePurchaseButton();
-        }
 
         function selectPlan(planId) {
             selectedPlan = planId;
@@ -3822,10 +3777,9 @@
         function updatePurchaseButton() {
             const btnText = document.getElementById('purchaseBtnText');
             if (btnText) {
-                const price = PLAN_PRICING[billingCycle][selectedPlan];
+                const price = PLAN_PRICING[selectedPlan];
                 const label = PLAN_LABELS[selectedPlan] || selectedPlan;
-                const suffix = billingCycle === 'yearly' ? ' (Yearly)' : '/mo';
-                btnText.textContent = `Upgrade to ${label} — ${price}${billingCycle === 'monthly' ? '/mo' : ''}`;
+                btnText.textContent = `Upgrade to ${label} — ${price} one-time`;
             }
         }
 
@@ -3955,7 +3909,7 @@
 
                             if (verifyRes.ok) {
                                 const result = await verifyRes.json();
-                                alert(`✅ Welcome to ${PLAN_LABELS[result.plan]}! ${result.upscale_credits_added} upscale credits added.`);
+                                alert(`✅ Welcome to ${PLAN_LABELS[selectedPlan]}! ${result.upscale_credits_added} upscale credits added.`);
 
                                 // Meta Pixel tracking
                                 if (typeof fbq !== 'undefined') {
