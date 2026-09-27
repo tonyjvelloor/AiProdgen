@@ -10,6 +10,14 @@
 // entry point.
 const http = require('node:http');
 
+// The local .env carries the live Meta Pixel's Conversions API credentials,
+// so every test run was sending fake Purchase/Lead events for @example.com
+// buyers into the dataset ad delivery optimizes on. Set (not delete) so a
+// later dotenv.config() can't restore them; services/facebook.js reads them
+// when the app is first required in start().
+process.env.FB_ACCESS_TOKEN = '';
+process.env.FB_PIXEL_ID = '';
+
 let server;
 let origin;
 

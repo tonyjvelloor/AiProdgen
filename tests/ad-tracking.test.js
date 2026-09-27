@@ -93,3 +93,45 @@ describe('no other service file hardcodes a live-looking secret', () => {
         });
     }
 });
+
+// Browser Pixel and server Conversions API both report Purchase and
+// InitiateCheckout. Without a shared event id Meta counts every conversion
+// twice, inflating ROAS and training delivery on the wrong signal.
+describe('conversion events are deduplicated across Pixel and CAPI', () => {
+    const fbService = fs.readFileSync(path.join(root, 'services', 'facebook.js'), 'utf8');
+    const read = (f) => fs.readFileSync(path.join(root, 'public', f), 'utf8');
+
+    test('the server sends an event id keyed on the Razorpay order', () => {
+        assert.ok(fbService.includes('setEventId(eventId)'));
+        assert.ok(fbService.includes('`purchase_${orderId}`'));
+        assert.ok(fbService.includes('`ic_${orderId}`'));
+    });
+
+    test('the browser sends the matching eventID for each purchase', () => {
+        assert.ok(read('landing.html').includes("eventID: 'purchase_' + response.razorpay_order_id"));
+        assert.ok(read('landing.html').includes("eventID: 'ic_' + data.orderId"));
+        assert.ok(read('app.html').includes("eventID: 'purchase_' + orderData.orderId"));
+    });
+
+    test('every server InitiateCheckout passes the order id', () => {
+        const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
+        const calls = [...server.matchAll(/fb\.trackInitiateCheckout\(([^)]*)\)/g)];
+        assert.ok(calls.length > 0);
+        for (const [, args] of calls) assert.ok(/order\.id\s*$/.test(args.trim()), `missing order id: ${args}`);
+    });
+
+    test('Lead events do not pass a plain object as custom data', () => {
+        // The SDK calls customData.normalize(); a {} default threw on every Lead.
+        assert.ok(!/customData\s*=\s*\{\}/.test(fbService));
+        assert.ok(fbService.includes('if (customData) serverEvent.setCustomData(customData)'));
+    });
+
+    test('bulk upscale is not reported as a checkout', () => {
+        assert.ok(!/fbq\('track', 'InitiateCheckout', \{\s*content_category: 'Bulk Upscale'/.test(read('app.html')));
+    });
+
+    test('the test harness never sends events to the live pixel', () => {
+        const harness = fs.readFileSync(path.join(__dirname, 'helpers', 'app.js'), 'utf8');
+        assert.ok(harness.includes("process.env.FB_ACCESS_TOKEN = ''"));
+    });
+});

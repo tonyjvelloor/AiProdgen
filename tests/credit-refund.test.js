@@ -30,7 +30,10 @@ describe('failed generations refund their credits', () => {
             const defs = [...server.matchAll(new RegExp(`(?:const|let)\\s+${name}\\s*=`, 'g'))];
             assert.strictEqual(defs.length, 1, `${name} is defined ${defs.length} times — the charge and refund can drift`);
         }
-        assert.ok(server.includes('credits: FLUX_COST'), 'Flux refund must use the shared constant');
-        assert.ok(server.includes('credits: VIDEO_COST'), 'Video refund must use the shared constant');
+        // The refund is what was actually debited: `charged` is set from the
+        // shared constant only once the debit succeeds, so an error thrown
+        // before the debit refunds nothing instead of minting credits.
+        assert.ok(server.includes('charged = FLUX_COST;'), 'Flux must record its charge from the shared constant');
+        assert.ok(server.includes('charged = VIDEO_COST;'), 'Video must record its charge from the shared constant');
     });
 });

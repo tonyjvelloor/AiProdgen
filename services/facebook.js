@@ -45,16 +45,22 @@ const createUserData = (userEmail, clientIp, userAgent, fbp, fbc) => {
     return userData;
 };
 
-const sendEvent = (eventName, userData, customData = {}, eventSourceUrl) => {
+// eventId must match the eventID the browser Pixel sends for the same action,
+// or Meta counts the conversion twice (once per channel). Both sides key it on
+// the Razorpay order id.
+const sendEvent = (eventName, userData, { customData, eventId, eventSourceUrl } = {}) => {
     if (!isConfigured) return Promise.resolve(null);
 
     const serverEvent = new ServerEvent()
         .setEventName(eventName)
         .setEventTime(Math.floor(new Date() / 1000))
         .setUserData(userData)
-        .setCustomData(customData)
         .setEventSourceUrl(eventSourceUrl || currentUrl)
         .setActionSource('website');
+    // The SDK calls customData.normalize(); a plain {} default made every
+    // Lead event throw before it was sent.
+    if (customData) serverEvent.setCustomData(customData);
+    if (eventId) serverEvent.setEventId(eventId);
 
     const eventsData = [serverEvent];
     const eventRequest = new EventRequest(access_token, pixel_id).setEvents(eventsData);
@@ -90,20 +96,20 @@ module.exports = {
                 .setCurrency(currency)
                 .setOrderId(orderId);
 
-            await sendEvent('Purchase', userData, customData);
+            await sendEvent('Purchase', userData, { customData, eventId: orderId ? `purchase_${orderId}` : undefined });
         } catch (e) {
             console.error('Failed to track Purchase:', e.message);
         }
     },
 
-    trackInitiateCheckout: async (userEmail, value, currency, clientIp, userAgent, fbp, fbc) => {
+    trackInitiateCheckout: async (userEmail, value, currency, clientIp, userAgent, fbp, fbc, orderId) => {
         try {
             const userData = createUserData(userEmail, clientIp, userAgent, fbp, fbc);
             const customData = new CustomData()
                 .setValue(value)
                 .setCurrency(currency);
 
-            await sendEvent('InitiateCheckout', userData, customData);
+            await sendEvent('InitiateCheckout', userData, { customData, eventId: orderId ? `ic_${orderId}` : undefined });
         } catch (e) {
             console.error('Failed to track InitiateCheckout:', e.message);
         }

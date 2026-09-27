@@ -11,7 +11,6 @@ const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
 // simultaneously.
 const MONEY_ROUTES = [
     '/api/generate-image',
-    '/api/upscale-esrgan',
     '/api/upscale-esrgan-paid',
     '/api/video/generate',
     '/api/video/generate-veo',

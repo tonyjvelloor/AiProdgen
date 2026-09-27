@@ -489,6 +489,18 @@ module.exports = {
             .eq('razorpay_order_id', razorpayOrderId);
         return !error;
     },
+    // DELETE ... RETURNING under a row lock: of any number of concurrent or
+    // replayed calls for the same order, exactly one gets the row back. That
+    // is what makes a payment single-use.
+    claimPendingOrder: async (razorpayOrderId, email) => {
+        const { data, error } = await supabaseAdmin.from('pending_orders')
+            .delete()
+            .eq('razorpay_order_id', razorpayOrderId)
+            .eq('email', email)
+            .select();
+        if (error) throw new Error(`claimPendingOrder failed: ${error.message}`);
+        return (data && data[0]) || null;
+    },
     createResetToken: async (email, tokenHash, expiresAt) => { 
         const user = await module.exports.getUserByEmail(email);
         if (!user) return false;

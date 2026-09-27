@@ -36,6 +36,7 @@ const ProductionEngine = require('./lib/engines/production');
 const { supabaseAdmin, isSupabaseConfigured } = require('./lib/supabase');
 const { getJwtSecret } = require('./lib/jwtSecret');
 const UsageRecorder = require('./lib/usage_recorder');
+const CostEstimator = require('./lib/cost_estimator');
 const { getUserProviderKey } = require('./lib/userKeys');
 const entitlements = require('./lib/entitlements');
 const referrals = require('./lib/referrals');
@@ -694,106 +695,6 @@ app.post('/api/validate-key', async (req, res) => {
     }
 });
 
-// 4. Real-ESRGAN Upscale Route (using Replicate API)
-app.post('/api/upscale-esrgan', auth.requireAuth, requireVerifiedUser, requireGenerateRateLimit, async (req, res) => {
-    try {
-        const { image, scale = 4, face_enhance = false } = req.body;
-        const replicateApiKey = process.env.REPLICATE_API_TOKEN;
-
-        // Plan gating: Creator+ only
-        const userPlan = await db.getUserPlan(req.user.userId);
-        const planConfig = getPlanConfig(userPlan.plan);
-        if (planConfig.upscale <= 0) {
-            return res.status(403).json({ error: 'HD Upscaling requires Creator plan or higher. Upgrade to unlock!' });
-        }
-
-        if (!image) {
-            return res.status(400).json({ error: 'No image provided' });
-        }
-
-        if (!replicateApiKey) {
-            return res.status(500).json({ error: 'REPLICATE_API_TOKEN not configured on server' });
-        }
-
-        // Validate scale (2, 4, or 8)
-        const validScales = [2, 4, 8];
-        const upscaleScale = validScales.includes(scale) ? scale : 4;
-        const enableFaceEnhance = Boolean(face_enhance);
-
-        console.log(`🔍 Upscaling image at ${upscaleScale}x using Real-ESRGAN (face_enhance: ${enableFaceEnhance})...`);
-
-        // Call Replicate API directly
-        const response = await fetch('https://api.replicate.com/v1/predictions', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${replicateApiKey}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                version: 'f121d640bd286e1fdc67f9799164c1d5be36ff74576ee11c803ae5b665dd46aa',
-                input: {
-                    image: `data:image/png;base64,${image}`,
-                    scale: upscaleScale,
-                    face_enhance: enableFaceEnhance
-                }
-            })
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || 'Replicate API error');
-        }
-
-        const prediction = await response.json();
-
-        // Poll for completion (Replicate is async)
-        let result = prediction;
-        let attempts = 0;
-        while (result.status !== 'succeeded' && result.status !== 'failed' && attempts < 60) {
-            await sleep(2000);
-            const pollResponse = await fetch(result.urls.get, {
-                headers: { 'Authorization': `Bearer ${replicateApiKey}` }
-            });
-            result = await pollResponse.json();
-            attempts++;
-        }
-
-        if (result.status === 'failed') {
-            throw new Error(result.error || 'Upscaling failed');
-        }
-
-        if (!result.output) {
-            await UsageRecorder.record({
-                userId: req.user.userId, job: 'upscale', model: 'esrgan',
-                fundedBy: 'platform', status: 'failed', error: 'no output from upscaler'
-            });
-            throw new Error('No output received from upscaler');
-        }
-
-        // Fetch the upscaled image and convert to base64
-        const imageResponse = await fetch(result.output);
-        const imageBuffer = await imageResponse.arrayBuffer();
-        const upscaledBase64 = Buffer.from(imageBuffer).toString('base64');
-
-        console.log(`✅ Upscaling complete (${upscaleScale}x)`);
-
-        await UsageRecorder.record({
-            userId: req.user.userId, job: 'upscale', model: 'esrgan', fundedBy: 'platform'
-        });
-
-        res.json({
-            image: upscaledBase64,
-            scale: upscaleScale,
-            originalSize: image.length,
-            upscaledSize: upscaledBase64.length
-        });
-
-    } catch (error) {
-        console.error('❌ Upscale Error:', error.message);
-        res.status(500).json({ error: error.message });
-    }
-});
-
 // ============ Upscale Credits API ============
 
 // Credit packages (amount in paise)
@@ -910,6 +811,42 @@ const LIFETIME_OFFER_PRICES = {
     USD: [47],
     INR: [3999]
 };
+
+// What an order bought is recorded server-side when the order is created
+// (pending_orders) and read back from there at verify -- never from the
+// request body. The Razorpay signature only proves *an* order was paid, so a
+// body-supplied planId/packageId let a $5 credit payment activate a $197
+// plan, and replaying one payment re-granted credits indefinitely. Every
+// price below is distinct, so a stored (amount, currency) names exactly one
+// product; tests/payment-integrity.test.js guards that invariant.
+function planForOrder(order) {
+    if (!order || order.currency !== 'USD') return null;
+    const amount = Number(order.amount);
+    return Object.keys(PLAN_PRICES).find(id => PLAN_PRICES[id].onetime_usd === amount) || null;
+}
+
+function creditPackageForOrder(order) {
+    const field = order && ({ USD: 'amount_usd', INR: 'amount_inr' })[order.currency];
+    if (!field) return null;
+    const amount = Number(order.amount);
+    return Object.keys(CREDIT_PACKAGES).find(id => CREDIT_PACKAGES[id][field] === amount) || null;
+}
+
+function isLifetimeOfferOrder(order) {
+    if (!order) return false;
+    const amount = Number(order.amount);
+    return (LIFETIME_OFFER_PRICES[order.currency] || []).some(p => Math.round(p * 100) === amount);
+}
+
+// Backstop for platform-funded work that isn't paid per use with credits:
+// however the allowance is defined, one account cannot cost more than this
+// in 30 days. Same ceiling PolicyEngine applies to the V2 engines.
+async function overPlatformSpendCeiling(userId, nextCost) {
+    const ceiling = Number(process.env.PLATFORM_SPEND_CEILING_USD || 25);
+    if (!(ceiling > 0)) return false;
+    const spent = await db.getUserPlatformSpend(userId, 30);
+    return spent + nextCost > ceiling;
+}
 
 // Credit price per generation. Defined once: these are charged before the
 // provider call and refunded by providerFailure if it fails, and the two must
@@ -1048,11 +985,13 @@ app.post('/api/credits/purchase', auth.requireAuth, async (req, res) => {
             }
         });
 
+        await db.createPendingOrder(order.id, req.user.email, amount, useCurrency);
+
         console.log(`💳 Credit purchase order created: ${order.id} for ${pkg.credits} credits (${useCurrency} ${amount / 100})`);
 
         // Track InitiateCheckout with value/currency
         const { ip, userAgent, fbp, fbc } = getClientInfo(req);
-        fb.trackInitiateCheckout(req.user.email, amount / 100, useCurrency, ip, userAgent, fbp, fbc).catch(e => console.error(e));
+        fb.trackInitiateCheckout(req.user.email, amount / 100, useCurrency, ip, userAgent, fbp, fbc, order.id).catch(e => console.error(e));
 
         res.json({
             orderId: order.id,
@@ -1071,7 +1010,7 @@ app.post('/api/credits/purchase', auth.requireAuth, async (req, res) => {
 // Verify payment and add credits
 app.post('/api/credits/verify', auth.requireAuth, async (req, res) => {
     try {
-        const { razorpay_order_id, razorpay_payment_id, razorpay_signature, packageId, currency } = req.body;
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
         if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
             return res.status(400).json({ error: 'Missing payment details' });
@@ -1089,10 +1028,15 @@ app.post('/api/credits/verify', auth.requireAuth, async (req, res) => {
             return res.status(400).json({ error: 'Invalid payment signature' });
         }
 
-        const pkg = CREDIT_PACKAGES[packageId];
-        if (!pkg) {
-            return res.status(400).json({ error: 'Invalid package' });
+        // The package and price come from the order this user created, and
+        // claiming it makes the payment single-use.
+        const order = await db.claimPendingOrder(razorpay_order_id, req.user.email);
+        const packageId = creditPackageForOrder(order);
+        if (!packageId) {
+            if (order) console.error(`[payments] order ${razorpay_order_id} (payment ${razorpay_payment_id}) is not a credit pack: ${order.currency} ${order.amount}`);
+            return res.status(400).json({ error: 'Order not found or already processed' });
         }
+        const pkg = CREDIT_PACKAGES[packageId];
 
         // Get user
         const user = await db.getUserByEmail(req.user.email);
@@ -1100,12 +1044,12 @@ app.post('/api/credits/verify', auth.requireAuth, async (req, res) => {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        // Determine amount logged
-        const useCurrency = (currency === 'USD') ? 'USD' : 'INR';
-        const amount = (useCurrency === 'USD') ? pkg.amount_usd : pkg.amount_inr;
+        const useCurrency = order.currency;
+        const amount = Number(order.amount);
 
-        // Add credits and record purchase
-        await db.addCredits(user.id, pkg.credits);
+        // recordCreditPurchase is itself the credit grant (a ledger row tagged
+        // with the payment id). This used to be preceded by a separate
+        // addCredits call, so every pack granted twice what was paid for.
         await db.recordCreditPurchase(user.id, pkg.credits, amount, razorpay_payment_id, razorpay_order_id);
         await db.recordPayment({
             paymentId: razorpay_payment_id, orderId: razorpay_order_id,
@@ -1116,16 +1060,12 @@ app.post('/api/credits/verify', auth.requireAuth, async (req, res) => {
         const newBalance = await db.getUserCredits(user.id);
         console.log(`✅ Credits added: ${pkg.credits} for user ${user.email}. New balance: ${newBalance}`);
 
-        // Track Purchase
+        // Track Purchase (major currency unit, from the order actually paid)
         const { ip, userAgent, fbp, fbc } = getClientInfo(req);
-        // Calculate amount in major currency unit (dollars/rupees, not cents/paise)
-        const isUsd = (currency === 'USD');
-        const purchaseAmount = isUsd ? (pkg.amount_usd / 100) : (pkg.amount_inr / 100);
-
         fb.trackPurchase(
             req.user.email,
-            purchaseAmount,
-            currency || 'INR',
+            amount / 100,
+            useCurrency,
             razorpay_order_id,
             ip, userAgent, fbp, fbc
         ).catch(e => console.error(e));
@@ -1136,8 +1076,8 @@ app.post('/api/credits/verify', auth.requireAuth, async (req, res) => {
             new_balance: newBalance
         });
     } catch (error) {
-        console.error('❌ Verify credit payment error:', error.message);
-        res.status(500).json({ error: 'Failed to verify payment' });
+        console.error(`❌ Verify credit payment error for ${req.user?.email} (order ${req.body?.razorpay_order_id}, payment ${req.body?.razorpay_payment_id}):`, error.message);
+        res.status(500).json({ error: 'Failed to verify payment. Your payment is safe; contact support with your payment ID.' });
     }
 });
 
@@ -1213,6 +1153,7 @@ app.post('/api/plan/subscribe', auth.requireAuth, async (req, res) => {
                 email: req.user.email
             }
         });
+        await db.createPendingOrder(order.id, req.user.email, amount, useCurrency);
 
         res.json({
             orderId: order.id,
@@ -1231,7 +1172,9 @@ app.post('/api/plan/subscribe', auth.requireAuth, async (req, res) => {
 // Verify plan payment
 app.post('/api/plan/verify', auth.requireAuth, async (req, res) => {
     try {
-        const { razorpay_order_id, razorpay_payment_id, razorpay_signature, planId: rawPlanId, billingCycle = 'monthly' } = req.body;
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+        // Every plan is a one-time lifetime purchase.
+        const billingCycle = 'lifetime';
 
         if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
             return res.status(400).json({ error: 'Missing payment details' });
@@ -1248,13 +1191,13 @@ app.post('/api/plan/verify', auth.requireAuth, async (req, res) => {
             return res.status(400).json({ error: 'Invalid payment signature' });
         }
 
-        // Same alias mismatch as /api/plan/subscribe: app.html sends 'creator',
-        // not 'hobbyist_ltd'. Resolve it the same way here so a successful
-        // payment doesn't fail at the activation step right after Razorpay has
-        // already been charged.
-        const planId = PLAN_ALIASES[rawPlanId] || rawPlanId;
-        if (!PLAN_PRICES[planId]) {
-            return res.status(400).json({ error: 'Invalid plan' });
+        // The plan comes from the order this user created and paid for, not
+        // from the request body; claiming it makes the payment single-use.
+        const order = await db.claimPendingOrder(razorpay_order_id, req.user.email);
+        const planId = planForOrder(order);
+        if (!planId) {
+            if (order) console.error(`[payments] order ${razorpay_order_id} (payment ${razorpay_payment_id}) is not a plan order: ${order.currency} ${order.amount}`);
+            return res.status(400).json({ error: 'Order not found or already processed' });
         }
 
         // Activate plan
@@ -1310,8 +1253,10 @@ app.post('/api/plan/verify', auth.requireAuth, async (req, res) => {
             upscale_credits_added: planConfig.upscale
         });
     } catch (error) {
-        console.error('❌ Plan verify error:', error.message);
-        res.status(500).json({ error: 'Failed to verify plan payment' });
+        // By this point the order may already be claimed: the customer has
+        // paid and needs manual activation. Log enough to do that.
+        console.error(`❌ Plan verify error for ${req.user?.email} (order ${req.body?.razorpay_order_id}, payment ${req.body?.razorpay_payment_id}):`, error.message);
+        res.status(500).json({ error: 'Failed to verify plan payment. Your payment is safe; contact support with your payment ID.' });
     }
 });
 
@@ -2151,7 +2096,7 @@ app.post('/api/payment/create-order', async (req, res) => {
 
         // Track InitiateCheckout with value for better attribution
         const { ip, userAgent, fbp, fbc } = getClientInfo(req);
-        fb.trackInitiateCheckout(email, amountValue, currency, ip, userAgent, fbp, fbc).catch(e => console.error(e));
+        fb.trackInitiateCheckout(email, amountValue, currency, ip, userAgent, fbp, fbc, order.id).catch(e => console.error(e));
 
         // Store pending order with currency
         await db.createPendingOrder(order.id, email, amountInSmallestUnit, currency);
@@ -2188,10 +2133,12 @@ app.post('/api/payment/verify', async (req, res) => {
             return res.status(400).json({ error: 'Invalid payment signature' });
         }
 
-        // Get pending order to retrieve email
+        // Get pending order to retrieve email. In-app plan and credit orders
+        // share this table, so only the lifetime offer's own prices are
+        // redeemable here.
         const pendingOrder = await db.getPendingOrder(razorpay_order_id);
 
-        if (!pendingOrder) {
+        if (!isLifetimeOfferOrder(pendingOrder)) {
             return res.status(400).json({ error: 'Order not found' });
         }
 
@@ -2356,6 +2303,9 @@ app.post('/api/auth/reset-password', requireLoginRateLimit, async (req, res) => 
 
 // Video Generation Endpoint (Creator+ plan required)
 app.post('/api/video/generate', auth.requireAuth, requireGenerateRateLimit, async (req, res) => {
+    // Only what was actually debited is refunded on failure; refunding a
+    // fixed amount minted credits for errors thrown before the debit.
+    let charged = 0;
     try {
         const user = req.user;
         const { imageUrl, prompt, model, endImageUrl, directorMode } = req.body;
@@ -2426,7 +2376,10 @@ app.post('/api/video/generate', auth.requireAuth, requireGenerateRateLimit, asyn
         if (userCredits < VIDEO_COST) {
             return res.status(402).json({ error: 'Insufficient credits', required: VIDEO_COST, current: userCredits });
         }
-        await db.useCredits(user.userId, VIDEO_COST);
+        if (!await db.useCredits(user.userId, VIDEO_COST)) {
+            return res.status(402).json({ error: 'Insufficient credits', required: VIDEO_COST });
+        }
+        charged = VIDEO_COST;
 
         const prediction = await replicate.generateVideoFromImage(imageUrl, prompt, model, { endImageUrl, directorMode });
         await db.recordAsyncJob(prediction.id, user.userId, 'replicate', 'video');
@@ -2444,7 +2397,7 @@ app.post('/api/video/generate', auth.requireAuth, requireGenerateRateLimit, asyn
         });
 
     } catch (error) {
-        return await providerFailure(res, error, 'Video', { userId: req.user?.userId, credits: VIDEO_COST });
+        return await providerFailure(res, error, 'Video', { userId: req.user?.userId, credits: charged });
     }
 });
 
@@ -2553,6 +2506,7 @@ app.get('/api/ugc/gallery/public', async (req, res) => {
 
 // Flux Image Generation Endpoint (Casting)
 app.post('/api/image/generate-flux', auth.requireAuth, requireGenerateRateLimit, async (req, res) => {
+    let charged = 0;
     try {
         const user = req.user;
         const { prompt, aspectRatio } = req.body;
@@ -2572,7 +2526,10 @@ app.post('/api/image/generate-flux', auth.requireAuth, requireGenerateRateLimit,
             });
         }
 
-        await db.useCredits(user.userId, FLUX_COST);
+        if (!await db.useCredits(user.userId, FLUX_COST)) {
+            return res.status(402).json({ error: 'Insufficient credits', required: FLUX_COST });
+        }
+        charged = FLUX_COST;
 
         const prediction = await replicate.generateImageFlux(prompt, aspectRatio);
         await db.recordAsyncJob(prediction.id, user.userId, 'replicate', 'image');
@@ -2590,7 +2547,7 @@ app.post('/api/image/generate-flux', auth.requireAuth, requireGenerateRateLimit,
         });
 
     } catch (error) {
-        return await providerFailure(res, error, 'Flux', { userId: req.user?.userId, credits: FLUX_COST });
+        return await providerFailure(res, error, 'Flux', { userId: req.user?.userId, credits: charged });
     }
 });
 
@@ -2807,6 +2764,18 @@ app.post('/api/ugc/render-scene', auth.requireAuth, requireGenerateRateLimit, as
         // --- End Veo Path ---
 
         // --- Standard Image Generation Path ---
+        // Platform-funded (Replicate) and not paid per use with credits, so
+        // it is limited to plans that include UGC, plus the spend backstop.
+        // Without this any account, free included, could render on our bill.
+        const scenePlan = await db.getUserPlan(userId);
+        if (!(getPlanConfig(scenePlan.plan).ugc > 0)) {
+            return res.status(403).json({ error: 'UGC Studio is included with the Pro and Agency plans. Upgrade to unlock it.' });
+        }
+        const sceneModel = faceImage ? 'instant-id' : 'flux-schnell';
+        if (await overPlatformSpendCeiling(userId, CostEstimator.estimateProvider(sceneModel, 1).totalCost)) {
+            return res.status(429).json({ error: 'You have reached the monthly rendering limit for your account. It resets over the next 30 days.' });
+        }
+
         // Build enhanced prompt with product placement if product image provided
         let enhancedPrompt = prompt;
         if (productImage) {

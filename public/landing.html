@@ -1259,7 +1259,7 @@
                                     currency: currentCurrency,
                                     content_name: 'Lifetime Access',
                                     content_type: 'product'
-                                });
+                                }, { eventID: 'purchase_' + response.razorpay_order_id });
                             }
 
                             // Show credentials and redirect
@@ -1285,7 +1285,7 @@
                     fbq('track', 'InitiateCheckout', {
                         value: price,
                         currency: currentCurrency
-                    });
+                    }, { eventID: 'ic_' + data.orderId });
                 }
 
                 closeModal();

@@ -32,6 +32,13 @@ const sessionFor = (user) => ({
 
 const createdUserIds = [];
 after(async () => {
+    // This suite runs against the real database. Payment rows outlive their
+    // user, and every run used to leave fake revenue in the payments ledger
+    // that the admin dashboard reports from.
+    if (createdUserIds.length) {
+        const { supabaseAdmin } = require('../lib/supabase');
+        await supabaseAdmin.from('payments').delete().in('user_id', createdUserIds);
+    }
     for (const id of createdUserIds) await db.deleteUser(id).catch(() => {});
 });
 
@@ -93,8 +100,9 @@ describe('acceptance checklist', { skip }, () => {
 
         test('re-verifying the same plan does not duplicate the entitlement row', async () => {
             const orderId = `order_reverify_${Date.now()}`, paymentId = `pay_reverify_${Date.now()}`;
+            await db.createPendingOrder(orderId, user.email, 4900, 'USD'); // what /api/plan/subscribe records for 'creator'
             const res = await appHarness.request('POST', '/api/plan/verify', sessionFor(user),
-                JSON.stringify({ razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: sign(orderId, paymentId), planId: 'creator', billingCycle: 'monthly' }));
+                JSON.stringify({ razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: sign(orderId, paymentId) }));
             assert.strictEqual(res.statusCode, 200, res.body);
 
             const { supabaseAdmin } = require('../lib/supabase');
@@ -105,8 +113,9 @@ describe('acceptance checklist', { skip }, () => {
 
         test('upgrade to agency_ltd grants the full Agency Reseller V2 bundle', async () => {
             const orderId = `order_upgrade_${Date.now()}`, paymentId = `pay_upgrade_${Date.now()}`;
+            await db.createPendingOrder(orderId, user.email, 19700, 'USD'); // 'agency'
             const res = await appHarness.request('POST', '/api/plan/verify', sessionFor(user),
-                JSON.stringify({ razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: sign(orderId, paymentId), planId: 'agency', billingCycle: 'monthly' }));
+                JSON.stringify({ razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: sign(orderId, paymentId) }));
             assert.strictEqual(res.statusCode, 200, res.body);
 
             assert.strictEqual((await db.getUserPlan(user.id)).plan, 'agency_ltd');
@@ -123,8 +132,9 @@ describe('acceptance checklist', { skip }, () => {
 
         test('downgrade back to hobbyist_ltd revokes bulk/commercial but keeps the standalone purchase', async () => {
             const orderId = `order_downgrade_${Date.now()}`, paymentId = `pay_downgrade_${Date.now()}`;
+            await db.createPendingOrder(orderId, user.email, 4900, 'USD'); // 'creator'
             const res = await appHarness.request('POST', '/api/plan/verify', sessionFor(user),
-                JSON.stringify({ razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: sign(orderId, paymentId), planId: 'creator', billingCycle: 'monthly' }));
+                JSON.stringify({ razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: sign(orderId, paymentId) }));
             assert.strictEqual(res.statusCode, 200, res.body);
 
             assert.strictEqual((await db.getUserPlan(user.id)).plan, 'hobbyist_ltd');

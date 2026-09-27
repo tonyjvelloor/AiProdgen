@@ -2551,14 +2551,10 @@
                 document.getElementById('bulkProgressText').textContent = `${completed} / ${total}`;
             }
 
-            // Meta Pixel: Track InitiateCheckout for bulk upscale
+            // A usage signal, not a checkout: reporting it as InitiateCheckout
+            // with value=credits fed fake funnel events to ad optimization.
             if (typeof fbq !== 'undefined' && upscaledResults.length > 0) {
-                fbq('track', 'InitiateCheckout', {
-                    content_category: 'Bulk Upscale',
-                    num_items: upscaledResults.length,
-                    currency: 'INR',
-                    value: creditsUsed // approximate value based on credits
-                });
+                fbq('trackCustom', 'BulkUpscale', { num_items: upscaledResults.length });
             }
 
             document.getElementById('bulkUpscaleBtn').disabled = false;
@@ -3662,66 +3658,6 @@
             updateFaceToggleVisual();
         }
 
-        async function startUpscale() {
-            if (!upscaleSourceImage) return;
-
-            const loading = document.getElementById('upscaleLoading');
-            const status = document.getElementById('upscaleStatus');
-            const startBtn = document.getElementById('upscaleStartBtn');
-            const downloadBtn = document.getElementById('downloadUpscaledBtn');
-            const faceEnhance = document.getElementById('faceEnhanceToggle').checked;
-
-            // Show loading
-            loading.classList.remove('hidden');
-            startBtn.classList.add('hidden');
-            const faceText = faceEnhance ? ' + Face Enhance' : '';
-            status.textContent = `Upscaling at ${selectedUpscaleScale}x${faceText} with Real-ESRGAN...`;
-
-            try {
-                const imageData = upscaleSourceImage.split(',')[1];
-
-                const res = await fetch('/api/upscale-esrgan', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        image: imageData,
-                        scale: selectedUpscaleScale,
-                        face_enhance: faceEnhance
-                    })
-                });
-
-                const data = await res.json();
-
-                if (data.error) {
-                    throw new Error(data.error);
-                }
-
-                // Success! Show upscaled image
-                upscaledImageData = `data:image/png;base64,${data.image}`;
-                document.getElementById('upscaledImg').src = upscaledImageData;
-
-                // Update label with scale
-                const scaleLabel = selectedUpscaleScale === 2 ? 'HD' : selectedUpscaleScale === 4 ? '4K' : '8K';
-                document.getElementById('upscaledLabel').textContent = `UPSCALED (${scaleLabel})`;
-
-                // Show download button
-                downloadBtn.classList.remove('hidden');
-                downloadBtn.innerHTML = `
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    Download ${scaleLabel}
-                `;
-
-            } catch (e) {
-                status.textContent = '❌ ' + e.message;
-                startBtn.classList.remove('hidden');
-                console.error('Upscale error:', e);
-            } finally {
-                loading.classList.add('hidden');
-            }
-        }
-
         function updateCompareSlider(value) {
             const percent = 100 - value;
             document.getElementById('upscaledImg').style.clipPath = `inset(0 ${percent}% 0 0)`;
@@ -3918,7 +3854,7 @@
                                         currency: orderData.currency,
                                         content_name: `${selectedPlan} Plan (${billingCycle})`,
                                         content_type: 'product'
-                                    });
+                                    }, { eventID: 'purchase_' + orderData.orderId });
                                 }
 
                                 fetchCreditBalance();
