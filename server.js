@@ -37,6 +37,7 @@ const { supabaseAdmin, isSupabaseConfigured } = require('./lib/supabase');
 const { getJwtSecret } = require('./lib/jwtSecret');
 const UsageRecorder = require('./lib/usage_recorder');
 const CostEstimator = require('./lib/cost_estimator');
+const { GEMINI_IMAGE_MODEL, GEMINI_TEXT_MODEL } = require('./lib/models');
 const { getUserProviderKey } = require('./lib/userKeys');
 const entitlements = require('./lib/entitlements');
 const referrals = require('./lib/referrals');
@@ -347,6 +348,19 @@ async function waitForRateLimit(apiKey) {
 }
 
 // Universal Fetch Wrapper with retry logic and rate limit handling
+// Gemini 3 models always think, and interim "thought" parts -- including
+// draft images -- can precede the answer. Only non-thought parts are output,
+// and the last image is the final render.
+function geminiFinalImagePart(data) {
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    return parts.filter(p => p.inlineData && !p.thought).pop() || null;
+}
+
+function geminiAnswerText(data) {
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    return parts.filter(p => p.text && !p.thought).map(p => p.text).join('') || null;
+}
+
 async function callGoogleAPI(url, payload, apiKey, retries = 5) {
     if (!apiKey) {
         throw new Error("API Key is required. Please add your Gemini API key in Settings.");
@@ -425,7 +439,7 @@ app.post('/api/generate-text', auth.requireAuth, requireVerifiedUser, requireGen
         const systemPrompt = MARKETING_PREPROMPTS[prepromptType] || MARKETING_PREPROMPTS.default;
 
         const data = await callGoogleAPI(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent`,
             {
                 contents: [{ parts: [{ text: prompt }] }],
                 systemInstruction: { parts: [{ text: systemPrompt }] }
@@ -433,7 +447,7 @@ app.post('/api/generate-text', auth.requireAuth, requireVerifiedUser, requireGen
             apiKey
         );
 
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        const text = geminiAnswerText(data);
 
         // Log generation history (Text only counts as 0 images but we log it if needed, or we can skip)
         // For now we only log image generations in history as per schema "image_count"
@@ -615,7 +629,7 @@ app.post('/api/generate-image', auth.requireAuth, requireVerifiedUser, requireGe
         console.log("Sending prompt:", contentsParts[0].text);
 
         const data = await callGoogleAPI(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_IMAGE_MODEL}:generateContent`,
             {
                 contents: [{ parts: contentsParts }],
                 generationConfig: { responseModalities: ['TEXT', 'IMAGE'] }
@@ -625,7 +639,7 @@ app.post('/api/generate-image', auth.requireAuth, requireVerifiedUser, requireGe
         );
 
         const parts = data.candidates?.[0]?.content?.parts || [];
-        const imagePart = parts.find(p => p.inlineData);
+        const imagePart = geminiFinalImagePart(data);
         if (imagePart) {
             base64Image = imagePart.inlineData.data;
         }
@@ -635,7 +649,7 @@ app.post('/api/generate-image', auth.requireAuth, requireVerifiedUser, requireGe
             if (finishReason === 'SAFETY') {
                 throw new Error("Image blocked by safety filters. Try different prompt.");
             }
-            const textPart = parts.find(p => p.text);
+            const textPart = parts.find(p => p.text && !p.thought);
             if (textPart) {
                 console.log("Model returned text instead of image:", textPart.text.substring(0, 200));
             }
@@ -644,7 +658,7 @@ app.post('/api/generate-image', auth.requireAuth, requireVerifiedUser, requireGe
 
         // Log successful generation and track usage
         if (userId && userId > 0) {
-            await db.logGeneration(userId, 'google', 'gemini-2.5-flash-image', 0, 0, 0.005, 1, 0, 'success', null, null, null, null);
+            await db.logGeneration(userId, 'google', GEMINI_IMAGE_MODEL, 0, 0, 0.005, 1, 0, 'success', null, null, null, null);
             // Increment monthly gen count for paid plans
             if (planConfig.type === 'server' && userPlan.plan !== 'lifetime_founder') {
                 await db.incrementGenCount(userId);
@@ -1436,7 +1450,7 @@ app.post('/api/upscale-image', requireGenerateRateLimit, async (req, res) => {
         ];
 
         const data = await callGoogleAPI(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_IMAGE_MODEL}:generateContent`,
             {
                 contents: [{ parts: contentsParts }],
                 generationConfig: {
@@ -1448,7 +1462,7 @@ app.post('/api/upscale-image', requireGenerateRateLimit, async (req, res) => {
         );
 
         const parts = data.candidates?.[0]?.content?.parts || [];
-        const imagePart = parts.find(p => p.inlineData);
+        const imagePart = geminiFinalImagePart(data);
 
         if (imagePart) {
             res.json({ image: imagePart.inlineData.data });
@@ -2622,7 +2636,7 @@ Output ONLY valid JSON (no markdown, no code fences), with this exact structure:
 }
 Customize the visual_prompt and voiceover to match the product, industry, and benefit. Be creative and engaging. Keep voiceover text short (under 15 words each).`;
 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent`;
         const data = await callGoogleAPI(
             url,
             {
@@ -2633,11 +2647,11 @@ Customize the visual_prompt and voiceover to match the product, industry, and be
             3
         );
 
-        const textPart = data.candidates?.[0]?.content?.parts?.find(p => p.text);
-        if (!textPart) throw new Error('No response from Gemini');
+        const answer = geminiAnswerText(data);
+        if (!answer) throw new Error('No response from Gemini');
 
         // Parse JSON from response (strip markdown fences if present)
-        let jsonStr = textPart.text.trim();
+        let jsonStr = answer.trim();
         jsonStr = jsonStr.replace(/^```json?\s*/i, '').replace(/```\s*$/i, '').trim();
         const scriptData = JSON.parse(jsonStr);
 
