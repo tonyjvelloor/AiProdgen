@@ -69,5 +69,5 @@ try {
         });
     };
 } catch (e) {
-    module.exports = (req, res) => res.status(500).json({ error: "Initialization failed", message: e.message, stack: e.stack });
+    module.exports = (req, res) => res.status(500).json({ error: "Initialization failed"});
 }

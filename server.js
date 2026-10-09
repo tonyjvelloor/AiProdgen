@@ -119,7 +119,7 @@ app.use(cors({
             callback(null, true);
         } else {
             console.warn(`CORS blocked request from: ${origin}`);
-            callback(null, true); // Allow in dev, block in prod by removing this line
+            callback(new Error('Not allowed by CORS'));
         }
     },
     credentials: true
@@ -276,6 +276,8 @@ app.post('/api/webhooks/razorpay', express.raw({ type: 'application/json' }), as
 
 
 app.use(express.json({ limit: '50mb' }));
+const xssMiddleware = require('./lib/xssMiddleware');
+app.use(xssMiddleware);
 app.use(express.static('public'));
 
 // ==========================================

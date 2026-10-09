@@ -27,6 +27,6 @@ module.exports = async function handler(req, res) {
       created_at: data.created_at
     });
   } catch (e) {
-    res.status(500).json({ error: 'Internal server error', message: e.message });
+    res.status(500).json({ error: 'Internal server error',  });
   }
 }
