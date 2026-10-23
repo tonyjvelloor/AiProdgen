@@ -262,17 +262,27 @@
         function renderHeader() {
             document.getElementById('productName').textContent = productData.name;
             document.getElementById('productCategory').textContent = productData.category || 'Uncategorized';
-            document.getElementById('productStatus').textContent = productData.status;
+            document.getElementById('productStatus').textContent = productData.status || 'Active';
             
             let imageUrl = '';
             if (productData.primary_output && productData.primary_output.storage_path) {
                 imageUrl = productData.primary_output.storage_path;
-            } else if (productData.outputs) {
-                if(Array.isArray(productData.outputs) && productData.outputs.length > 0) imageUrl = productData.outputs[0].storage_path;
-                else if (productData.outputs.storage_path) imageUrl = productData.outputs.storage_path;
+            } else if (Array.isArray(productData.outputs) && productData.outputs.length > 0) {
+                imageUrl = productData.outputs[0].storage_path;
+            } else if (productData.outputs && productData.outputs.storage_path) {
+                imageUrl = productData.outputs.storage_path;
+            } else if (productData.image_url) {
+                imageUrl = productData.image_url;
             }
+
+            const imgContainer = document.getElementById('productImage');
             if (imageUrl) {
-                document.getElementById('productImage').style.backgroundImage = `url('${imageUrl}')`;
+                imgContainer.style.backgroundImage = `url('${imageUrl}')`;
+                imgContainer.style.backgroundSize = 'cover';
+                imgContainer.style.backgroundPosition = 'center';
+                imgContainer.innerHTML = '';
+            } else {
+                imgContainer.innerHTML = '<div class="w-full h-full flex items-center justify-center text-slate-400 text-xs font-semibold">No Image</div>';
             }
         }
 
