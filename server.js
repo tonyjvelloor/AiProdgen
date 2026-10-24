@@ -1591,58 +1591,58 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
 // ==========================================
 // SPRINT 1: ADMIN METRICS DASHBOARD
 // ==========================================
+let adminMetricsCache = { data: null, expiresAt: 0 };
+
 app.get('/api/admin/metrics', requireAdmin, async (req, res) => {
     try {
+        if (adminMetricsCache.data && Date.now() < adminMetricsCache.expiresAt) {
+            return res.json(adminMetricsCache.data);
+        }
+
         const { supabaseAdmin } = require('./lib/supabase');
-        
-        // --- 1. Revenue & Customers ---
-        // (Mocking financials based on users for now, or querying real data)
-        const { count: activeUsers } = await supabaseAdmin.from('users').select('*', { count: 'exact', head: true });
-        
-        // --- 2. Products & Production ---
-        const { data: workspaces } = await supabaseAdmin.from('workspaces').select('id');
-        const workspaceIds = workspaces?.map(w => w.id) || [];
-        
-        let activeProducts = 0;
+        const startOfToday = new Date(); startOfToday.setUTCHours(0, 0, 0, 0);
+
+        // Run all queries concurrently in parallel
+        const [
+            usersCountRes,
+            productsRes,
+            collectionsRes,
+            allPayments,
+            todayPayments,
+            runs
+        ] = await Promise.all([
+            supabaseAdmin.from('users').select('*', { count: 'exact', head: true }),
+            supabaseAdmin.from('products').select('id, status'),
+            supabaseAdmin.from('output_collections').select('product_id, engine, status'),
+            db.getRevenue(),
+            db.getRevenue(startOfToday.toISOString()),
+            supabaseAdmin.from('ai_runs').select('provider_cost, storage_cost, platform_cost, status, started_at, completed_at, funded_by, job')
+        ]);
+
+        const activeUsers = usersCountRes.count || 0;
+        const products = productsRes.data || [];
+        const activeProducts = products.length;
+
         let photographyReady = 0;
         let marketplaceReady = 0;
         let advertisingReady = 0;
-        
-        if (workspaceIds.length > 0) {
-            const { data: products } = await supabaseAdmin.from('products').select('id, status');
-            activeProducts = products?.length || 0;
-            
-            // Query output_collections to figure out completion rates
-            const { data: collections } = await supabaseAdmin.from('output_collections').select('product_id, engine, status');
-            if (collections) {
-                const productEngines = {};
-                collections.forEach(c => {
-                    if (c.status === 'completed') {
-                        if (!productEngines[c.product_id]) productEngines[c.product_id] = new Set();
-                        productEngines[c.product_id].add(c.engine);
-                    }
-                });
-                
-                Object.values(productEngines).forEach(engines => {
-                    if (engines.has('photography')) photographyReady++;
-                    if (engines.has('commerce')) marketplaceReady++;
-                    if (engines.has('campaign_blueprint')) advertisingReady++;
-                });
-            }
-        }
-        
-        // --- 3. Money ---------------------------------------------------
-        // These were hardcoded ("$29.00", "82%") with a comment saying they
-        // were mocked for the prototype, which meant the dashboard reported a
-        // healthy margin regardless of what the business was actually doing.
-        const startOfToday = new Date(); startOfToday.setUTCHours(0, 0, 0, 0);
 
-        const [allPayments, todayPayments, runs] = await Promise.all([
-            db.getRevenue(),
-            db.getRevenue(startOfToday.toISOString()),
-            supabaseAdmin.from('ai_runs')
-                .select('provider_cost, storage_cost, platform_cost, status, started_at, completed_at, funded_by, job')
-        ]);
+        const collections = collectionsRes.data;
+        if (collections) {
+            const productEngines = {};
+            collections.forEach(c => {
+                if (c.status === 'completed') {
+                    if (!productEngines[c.product_id]) productEngines[c.product_id] = new Set();
+                    productEngines[c.product_id].add(c.engine);
+                }
+            });
+            
+            Object.values(productEngines).forEach(engines => {
+                if (engines.has('photography')) photographyReady++;
+                if (engines.has('commerce')) marketplaceReady++;
+                if (engines.has('campaign_blueprint')) advertisingReady++;
+            });
+        }
 
         // Payment amounts are in the smallest unit of their own currency, so
         // they cannot simply be summed. Report per-currency totals.
@@ -1681,7 +1681,7 @@ app.get('/api/admin/metrics', requireAdmin, async (req, res) => {
 
         const timeSaved = (marketplaceReady * 4.2 + photographyReady * 2.5).toFixed(1);
 
-        res.json({
+        const payload = {
             revenue: {
                 today: sumByCurrency(todayPayments),
                 allTime: sumByCurrency(allPayments),
@@ -1724,7 +1724,14 @@ app.get('/api/admin/metrics', requireAdmin, async (req, res) => {
                 campaignsProduced: marketplaceReady,
                 estimatedHoursSaved: Number(timeSaved)
             }
-        });
+        };
+
+        adminMetricsCache = {
+            data: payload,
+            expiresAt: Date.now() + 30000 // Cache for 30s
+        };
+
+        res.json(payload);
     } catch (error) {
         console.error('Admin metrics error:', error);
         res.status(500).json({ error: 'Failed to load metrics' });
@@ -1823,19 +1830,19 @@ app.post('/api/auth/verify', async (req, res) => {
 
         const decoded = auth.verifyToken(token);
         if (decoded) {
-            // Check if user has paid (has a Razorpay payment ID)
+            // Check if user has paid (has a payment record or non-free plan)
             const user = await db.getUserByEmail(decoded.email);
-            const isPaid = !!(user && user.razorpay_payment_id);
-            const userPlan = await db.getUserPlan(decoded.userId);
+            const userPlan = user?.plan || 'free';
+            const isPaid = !!(user && (user.razorpay_payment_id || (userPlan !== 'free_explorer' && userPlan !== 'free')));
             res.json({
                 valid: true,
                 userId: decoded.userId,
                 email: decoded.email,
                 isPaid,
-                plan: userPlan.plan || 'free',
-                planConfig: getPlanConfig(userPlan.plan),
-                monthly_gen_count: userPlan.monthly_gen_count || 0,
-                monthly_ugc_count: userPlan.monthly_ugc_count || 0
+                plan: userPlan,
+                planConfig: getPlanConfig(userPlan),
+                monthly_gen_count: user?.monthly_gen_count || 0,
+                monthly_ugc_count: user?.monthly_ugc_count || 0
             });
         } else {
             res.json({ valid: false, message: 'Invalid or expired token' });

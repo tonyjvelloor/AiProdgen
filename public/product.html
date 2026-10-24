@@ -217,16 +217,13 @@
 
         async function initDashboard() {
             try {
-                // 1. Fetch Jobs Registry
-                const jobsRes = await fetch('/api/jobs', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if(jobsRes.ok) jobRegistry = await jobsRes.json();
+                // Fetch Jobs Registry and Product Data concurrently
+                const [jobsRes, prodRes] = await Promise.all([
+                    fetch('/api/jobs', { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch(`/api/products/${productId}`, { headers: { 'Authorization': `Bearer ${token}` } })
+                ]);
 
-                // 2. Fetch Product Data (assuming it returns collections or outputs)
-                const prodRes = await fetch(`/api/products/${productId}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
+                if (jobsRes.ok) jobRegistry = await jobsRes.json();
                 
                 if (prodRes.ok) {
                     productData = await prodRes.json();

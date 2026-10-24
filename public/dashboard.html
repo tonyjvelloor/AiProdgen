@@ -318,19 +318,16 @@
         // Load Workspace and Products
         async function loadWorkspace() {
             try {
-                // Workspace title
-                const wsRes = await fetch('/api/workspace', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
+                // Fetch Workspace and Products concurrently
+                const [wsRes, prodRes] = await Promise.all([
+                    fetch('/api/workspace', { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch('/api/products', { headers: { 'Authorization': `Bearer ${token}` } })
+                ]);
+
                 if (wsRes.ok) {
                     const ws = await wsRes.json();
                     document.getElementById('workspaceName').textContent = ws.name || 'Personal Workspace';
                 }
-
-                // Fetch Products
-                const prodRes = await fetch('/api/products', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
 
                 document.getElementById('loadingProducts').classList.add('hidden');
 
