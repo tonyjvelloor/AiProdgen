@@ -124,18 +124,31 @@ module.exports = {
 
     // ============ Credit Functions (Accounting Ledger) ============
     getUserCredits: async (userId) => {
-        // SaaS Completeness: Use true accounting SUM(amount) instead of reading last balance_after
-        const { data } = await supabaseAdmin.from('credit_transactions')
+        // SaaS Completeness: Use true accounting SUM(amount) and propagate database errors explicitly
+        const { data, error } = await supabaseAdmin.from('credit_transactions')
             .select('amount')
-            .eq('user_id', userId);
+            .eq('user_id', userId)
+            .limit(100000);
+        
+        if (error) {
+            console.error('Failed to fetch user credits:', error);
+            throw new Error(`getUserCredits failed: ${error.message}`);
+        }
         
         if (!data || data.length === 0) return 0;
         return data.reduce((sum, tx) => sum + tx.amount, 0);
     },
     getUserCreditInfo: async (userId) => {
-        const { data } = await supabaseAdmin.from('credit_transactions')
+        const { data, error } = await supabaseAdmin.from('credit_transactions')
             .select('amount')
-            .eq('user_id', userId);
+            .eq('user_id', userId)
+            .limit(100000);
+        
+        if (error) {
+            console.error('Failed to fetch user credit info:', error);
+            throw new Error(`getUserCreditInfo failed: ${error.message}`);
+        }
+        
         const rows = data || [];
         return {
             credits: rows.reduce((sum, tx) => sum + tx.amount, 0),
@@ -167,24 +180,52 @@ module.exports = {
             user_id: userId,
             type: 'debit',
             amount: -creditsToUse,
-            balance_after: 0,
+            balance_after: currentBalance - creditsToUse,
             source: referenceType,
             reference_id: referenceId
         });
         if (error) throw new Error(`useCredits failed: ${error.message}`);
         return true;
     },
-    // SaaS Completeness: Transaction Boundaries
-    reserveCredits: async (userId, amount, referenceId) => {
+    // SaaS Completeness: Transaction Boundaries with Idempotency & Concurrency Safety
+    reserveCredits: async (userId, amount, referenceId = null) => {
+        if (!userId || amount <= 0) return false;
+
+        // 1. Try atomic PostgreSQL RPC function if available (with row lock)
+        try {
+            const { data, error } = await supabaseAdmin.rpc('reserve_credits', {
+                p_user_id: userId,
+                p_amount: amount,
+                p_reference_id: referenceId
+            });
+
+            if (!error && typeof data === 'boolean') {
+                return data;
+            }
+        } catch (rpcErr) {
+            // Fall back to application-layer transaction logic
+        }
+
+        // 2. Idempotency check: if reservation already exists for this reference_id, don't charge again
+        if (referenceId) {
+            const { data: existing } = await supabaseAdmin.from('credit_transactions')
+                .select('id')
+                .eq('user_id', userId)
+                .eq('reference_id', referenceId)
+                .eq('type', 'reservation')
+                .maybeSingle();
+            if (existing) return true;
+        }
+
         const currentBalance = await module.exports.getUserCredits(userId);
         if (currentBalance < amount) return false;
         
-        // We deduct it as 'reservation'
+        // Deduct as 'reservation'
         const { error } = await supabaseAdmin.from('credit_transactions').insert({
             user_id: userId,
             type: 'reservation',
             amount: -amount,
-            balance_after: 0,
+            balance_after: currentBalance - amount,
             source: 'reserve',
             reference_id: referenceId
         });

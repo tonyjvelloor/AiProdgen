@@ -44,7 +44,11 @@ try {
 
         // 3. Create run record
         const runId = await db.createAIRun(user.id, productId, null, prompt, 1, 1);
-        await db.reserveCredits(user.id, 1, runId);
+        const reserved = await db.reserveCredits(user.id, 1, runId);
+        if (!reserved) {
+            await db.updateAIRun(runId, { status: 'failed' });
+            return res.status(402).json({ error: 'Insufficient credits available. Please top up.' });
+        }
 
         // 4. Fire Async Generation Task using @vercel/functions waitUntil
         waitUntil((async () => {

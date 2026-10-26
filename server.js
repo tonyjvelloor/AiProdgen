@@ -180,102 +180,27 @@ const requireCredits = async (req, res, next) => {
 };
 
 // ==========================================
-// SPRINT 1: RAZORPAY WEBHOOK (Idempotent)
+// CANONICAL RAZORPAY WEBHOOK (Idempotent & Reconciled)
 // ==========================================
-// NOTE: express.raw() is required to verify the raw payload signature
-app.post('/api/webhooks/razorpay', express.raw({ type: 'application/json' }), async (req, res) => {
-    try {
-        const signature = req.headers['x-razorpay-signature'];
-        if (!signature) return res.status(400).send('Missing signature');
-
-        // Verify webhook signature using the raw body buffer
-        const expectedSignature = crypto
-            .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET)
-            .update(req.body)
-            .digest('hex');
-
-        if (expectedSignature !== signature) {
-            console.error('❌ Invalid webhook signature');
-            return res.status(400).send('Invalid signature');
-        }
-
-        const payload = JSON.parse(req.body.toString());
-        console.log('✅ Razorpay Webhook Received:', payload.event);
-
-        const { supabaseAdmin } = require('./lib/supabase');
-        
-        // Log webhook event
-        try {
-            await supabaseAdmin.from('webhook_events').insert({
-                event_id: payload.event,
-                payload: payload
-            });
-        } catch (e) {
-            console.error('Failed to log webhook event (may already exist or schema missing):', e.message);
-        }
-
-        if (payload.event === 'payment.captured' || payload.event === 'order.paid') {
-            const payment = payload.payload.payment.entity;
-            const orderId = payment.order_id;
-            const paymentId = payment.id;
-            
-            const notes = payment.notes || {};
-            const userId = notes.userId;
-            const creditsToGrant = parseInt(notes.credits, 10);
-            
-            if (!userId || !creditsToGrant) {
-                console.warn('⚠️ Webhook missing userId or credits in notes, skipping.');
-                return res.status(200).send('Skipped: No user data in notes');
-            }
-
-            // Check Idempotency (has this payment already been processed?)
-            const { data: existingTx } = await supabaseAdmin.from('credit_transactions')
-                .select('id')
-                .eq('reference_id', paymentId)
-                .maybeSingle();
-
-            if (existingTx) {
-                console.log('🔄 Payment already processed, skipping:', paymentId);
-                return res.status(200).send('Already processed');
-            }
-
-            // Grant credits via ledger (append-only)
-            await db.recordCreditPurchase(userId, creditsToGrant, payment.amount / 100, paymentId, orderId);
-            await db.recordPayment({
-                paymentId, orderId, userId,
-                kind: 'credits', credits: creditsToGrant,
-                amount: payment.amount, currency: payment.currency || 'INR'
-            });
-            console.log(`✅ Successfully granted ${creditsToGrant} credits to user ${userId} via Webhook`);
-            
-            // Mark processed
-            try {
-                await supabaseAdmin.from('webhook_events')
-                    .update({ processed: true, processed_at: new Date().toISOString() })
-                    .eq('event_id', payload.event);
-            } catch (e) {}
-        }
-
-        res.status(200).send('OK');
-    } catch (error) {
-        console.error('❌ Webhook error:', error.message);
-        
-        // Attempt to log error if payload exists
-        try {
-            const payload = JSON.parse(req.body.toString());
-            const { supabaseAdmin } = require('./lib/supabase');
-            await supabaseAdmin.from('webhook_events')
-                .update({ error: error.message })
-                .eq('event_id', payload.event);
-        } catch (e) {}
-
-        // Do not return 500 otherwise Razorpay will endlessly retry
-        res.status(200).send('Error but acknowledged'); 
-    }
+const razorpayWebhookHandler = require('./api/webhooks/razorpay');
+app.post('/api/webhooks/razorpay', express.raw({ type: 'application/json' }), (req, res) => {
+    return razorpayWebhookHandler(req, res);
 });
 
-
-app.use(express.json({ limit: '50mb' }));
+// Request-size controls:
+// Dynamic JSON body limit: 50MB for high-res image routes, 2MB for all standard API endpoints
+app.use((req, res, next) => {
+    const isMediaRoute = 
+        req.path === '/api/products' || 
+        req.path === '/api/generate-image' || 
+        req.path === '/api/image/generate-flux' || 
+        req.path === '/api/upscale-esrgan-paid' ||
+        req.path === '/api/video/generate' ||
+        req.path === '/api/ugc/render-scene';
+    
+    const limit = isMediaRoute ? '50mb' : '2mb';
+    return express.json({ limit })(req, res, next);
+});
 const xssMiddleware = require('./lib/xssMiddleware');
 app.use(xssMiddleware);
 app.use(express.static('public'));
@@ -539,15 +464,26 @@ app.get('/api/products/:id', auth.requireAuth, async (req, res) => {
 app.put('/api/products/:id', auth.requireAuth, async (req, res) => {
     try {
         const product = await ProductService.getProductById(req.params.id);
+        if (!product) {
+            return res.status(404).json({ error: 'Product not found' });
+        }
         const workspace = await WorkspaceService.getOrCreateWorkspace(req.user.userId);
         if (product.workspace_id !== workspace.id) {
             return res.status(403).json({ error: 'Unauthorized' });
+        }
+
+        // Reject any cross-workspace reassignment attempt
+        if (req.body && req.body.workspace_id && req.body.workspace_id !== workspace.id) {
+            return res.status(400).json({ error: 'Cannot reassign product to another workspace' });
         }
         
         const updatedProduct = await ProductService.updateProduct(req.params.id, req.body);
         res.json(updatedProduct);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        const isClientError = error.message.includes('Cannot modify protected fields') ||
+                              error.message.includes('Invalid product status') ||
+                              error.message.includes('No valid update fields');
+        res.status(isClientError ? 400 : 500).json({ error: error.message });
     }
 });
 

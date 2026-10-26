@@ -1,18 +1,19 @@
 // api/webhooks/razorpay.js
+// Canonical, unified Razorpay Webhook handler for Express and Vercel Serverless
 const crypto = require('crypto');
 const entitlements = require('../../lib/entitlements');
 const referrals = require('../../lib/referrals');
-
-
+const db = require('../../database');
 
 async function getRawBody(req) {
+  if (Buffer.isBuffer(req.body)) return req.body;
+  if (typeof req.body === 'string') return Buffer.from(req.body);
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
   return Buffer.concat(chunks);
 }
 
-// Constant-time compare so a forged signature can't be recovered byte by byte
-// from response timing.
+// Constant-time compare so a forged signature can't be recovered byte by byte from timing
 function signatureMatches(signature, expected) {
   if (typeof signature !== 'string') return false;
   const a = Buffer.from(signature, 'utf8');
@@ -24,15 +25,10 @@ function signatureMatches(signature, expected) {
 async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  // Fail closed. Falling back to a placeholder secret would make every
-  // signature check pass for anyone who read this file, letting a forged
-  // payment.captured event grant paid entitlements for free.
-  // 'test_secret' was this file's hardcoded fallback and is in the git history,
-  // so treating it as a real secret would restore the bypass it caused. Reject
-  // the known placeholders the same way as an unset variable.
+  // Fail closed. Falling back to a placeholder secret or KEY_SECRET would allow signature bypass.
   const PLACEHOLDER_SECRETS = new Set(['test_secret', 'your_webhook_secret', 'changeme']);
-
   const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
   if (!webhookSecret || PLACEHOLDER_SECRETS.has(webhookSecret.trim().toLowerCase())) {
     console.error(
       webhookSecret
@@ -49,65 +45,137 @@ async function handler(req, res) {
     .update(rawBody)
     .digest('hex');
 
-  if (!signatureMatches(signature, expected)) return res.status(400).send('Invalid signature');
+  if (!signatureMatches(signature, expected)) {
+    console.error('[webhook] Invalid Razorpay webhook signature');
+    return res.status(400).send('Invalid signature');
+  }
 
-  const event = JSON.parse(rawBody.toString());
+  let event;
+  try {
+    event = JSON.parse(rawBody.toString());
+  } catch (err) {
+    return res.status(400).send('Invalid JSON payload');
+  }
 
-  // This originally upserted into `user_entitlements`, a table nothing ever
-  // read from -- a feature-unlock purchase notified via webhook granted
-  // nothing any route could check. It now grants through the same
-  // entitlements module the synchronous purchase-verify routes use.
-  // grantEntitlement's own dedupe (source='purchase' keyed by reference_id =
-  // payment id) makes this safe against Razorpay's at-least-once delivery:
-  // a retried payment.captured for the same payment grants nothing twice.
-  if (event.event === 'payment.captured') {
-    const payment = event.payload.payment.entity;
-    const { user_id, product_id, quantity } = payment.notes || {};
+  const { supabaseAdmin, isSupabaseConfigured } = require('../../lib/supabase');
+  const payment = event.payload?.payment?.entity;
+  const eventId = event.id || payment?.id || `${event.event}_${Date.now()}`;
 
-    if (!user_id || !product_id) {
-      console.error(`[webhook] payment.captured ${payment.id} has no user_id/product_id in notes -- nothing to grant`);
-    } else {
-      try {
-        await entitlements.grantEntitlement({
-          userId: user_id,
-          feature: product_id,
-          source: 'purchase',
-          referenceId: payment.id,
-          quantity: quantity ? parseInt(quantity, 10) : null
-        });
-      } catch (e) {
-        console.error('[webhook] entitlement grant failed:', e.message);
-        // Still return 200 so Razorpay doesn't retry endlessly on a DB
-        // hiccup -- log this for manual reconciliation instead.
-      }
+  // Log incoming webhook event for audit trail
+  if (isSupabaseConfigured) {
+    try {
+      await supabaseAdmin.from('webhook_events').insert({
+        event_id: eventId,
+        payload: event
+      });
+    } catch (e) {
+      // Event may already be recorded in database
     }
   }
 
-  // Razorpay fires this on the original payment when it's refunded (in full
-  // or in part). A refunded purchase must not leave the feature it bought
-  // still unlocked -- revoking by payment id needs no trust in this event's
-  // own notes, since reference_id was set to the payment id at grant time.
-  if (event.event === 'payment.refunded') {
-    const payment = event.payload.payment.entity;
-    try {
-      await entitlements.revokeEntitlementByReference(payment.id);
-    } catch (e) {
-      console.error('[webhook] entitlement revoke-on-refund failed:', e.message);
+  // 1. PAYMENT CAPTURED / ORDER PAID
+  if (event.event === 'payment.captured' || event.event === 'order.paid') {
+    if (!payment) {
+      console.warn('[webhook] payment.captured missing payment entity');
+      return res.status(200).send('Skipped: No payment entity');
     }
-    // Test 3/4 (Partner Program acceptance criteria): a refund before the
-    // hold window clears reverses the commission; a refund after it's paid
-    // is left alone and counted for manual clawback (see reverseCommissionsForPayment).
+
+    const notes = payment.notes || {};
+    const userId = notes.user_id || notes.userId;
+    const creditsToGrant = notes.credits ? parseInt(notes.credits, 10) : null;
+    const featureOrProduct = notes.product_id || notes.feature || notes.plan;
+    const quantity = notes.quantity ? parseInt(notes.quantity, 10) : null;
+
+    if (!userId) {
+      console.warn(`[webhook] payment ${payment.id} has no user_id in notes -- nothing to grant`);
+      return res.status(200).send('Skipped: No user data');
+    }
+
     try {
+      // A. Credit Pack Grants
+      if (creditsToGrant && creditsToGrant > 0) {
+        const { data: existingTx } = await supabaseAdmin.from('credit_transactions')
+          .select('id')
+          .eq('reference_id', payment.id)
+          .maybeSingle();
+
+        if (!existingTx) {
+          await db.recordCreditPurchase(
+            userId,
+            creditsToGrant,
+            payment.amount / 100,
+            payment.id,
+            payment.order_id
+          );
+          await db.recordPayment({
+            paymentId: payment.id,
+            orderId: payment.order_id,
+            userId,
+            kind: 'credits',
+            credits: creditsToGrant,
+            amount: payment.amount,
+            currency: payment.currency || 'INR'
+          });
+          console.log(`[webhook] Successfully granted ${creditsToGrant} credits to user ${userId}`);
+        }
+      }
+
+      // B. Entitlement / Feature Grants
+      if (featureOrProduct) {
+        await entitlements.grantEntitlement({
+          userId: userId,
+          feature: featureOrProduct,
+          source: 'purchase',
+          referenceId: payment.id,
+          quantity: quantity
+        });
+        console.log(`[webhook] Successfully granted entitlement ${featureOrProduct} to user ${userId}`);
+      }
+
+      // Mark webhook processed in audit ledger
+      if (isSupabaseConfigured) {
+        try {
+          await supabaseAdmin.from('webhook_events')
+            .update({ processed: true, processed_at: new Date().toISOString() })
+            .eq('event_id', eventId);
+        } catch (e) {}
+      }
+    } catch (grantErr) {
+      console.error('[webhook] Critical failure granting purchase benefits:', grantErr.message);
+      // Return 500 on transient database write error so Razorpay retries delivery
+      return res.status(500).json({ error: 'Database error processing webhook. Retry scheduled.' });
+    }
+  }
+
+  // 2. PAYMENT REFUNDED
+  if (event.event === 'payment.refunded') {
+    if (!payment) return res.status(200).send('Skipped: No payment entity');
+
+    try {
+      // A. Revoke Entitlement tied to this payment
+      await entitlements.revokeEntitlementByReference(payment.id);
+
+      // B. Reverse partner referral commissions if within clawback window
       const { reversed, needsClawback } = await referrals.reverseCommissionsForPayment(payment.id);
       if (reversed || needsClawback) {
         console.log(`[webhook] payment ${payment.id} refunded: ${reversed} commission(s) reversed, ${needsClawback} need manual clawback.`);
       }
-    } catch (e) {
-      console.error('[webhook] commission reversal failed:', e.message);
+
+      if (isSupabaseConfigured) {
+        try {
+          await supabaseAdmin.from('webhook_events')
+            .update({ processed: true, processed_at: new Date().toISOString() })
+            .eq('event_id', eventId);
+        } catch (e) {}
+      }
+    } catch (refundErr) {
+      console.error('[webhook] Critical failure processing refund:', refundErr.message);
+      return res.status(500).json({ error: 'Database error processing refund.' });
     }
   }
 
-  res.status(200).send('ok');
+  return res.status(200).send('OK');
 }
+
 module.exports = handler;
 module.exports.config = { api: { bodyParser: false } };
