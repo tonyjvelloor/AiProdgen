@@ -5,20 +5,20 @@
 -- Apply in Supabase SQL Editor. Safe to re-run.
 
 -- 1. Database-level partial unique indexes to strictly enforce idempotency
--- No duplicate reservation for the same reference_id can ever be inserted
+-- No duplicate reservation for the same reference_id can ever be inserted for a user
 create unique index if not exists credit_transactions_reservation_uniq 
 on credit_transactions (user_id, reference_id) 
 where type = 'reservation' and reference_id is not null;
 
--- No duplicate credit grant for the same payment/reference can ever be inserted
+-- No duplicate credit pack grant for the same payment can ever be inserted
 create unique index if not exists credit_transactions_grant_uniq 
-on credit_transactions (reference_id, type) 
-where type = 'credit' and reference_id is not null;
+on credit_transactions (reference_id) 
+where type = 'credit' and source in ('razorpay', 'purchase') and reference_id is not null;
 
--- No duplicate credit refund for the same payment/reference can ever be inserted
+-- No duplicate credit pack refund for the same payment can ever be inserted
 create unique index if not exists credit_transactions_refund_uniq 
-on credit_transactions (reference_id, type) 
-where type = 'refund' and reference_id is not null;
+on credit_transactions (reference_id) 
+where type = 'refund' and source = 'payment_refund' and reference_id is not null;
 
 -- 2. Concurrency-safe atomic reservation function
 create or replace function reserve_credits(p_user_id uuid, p_amount integer, p_reference_id text default null)
