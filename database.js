@@ -229,7 +229,11 @@ module.exports = {
             source: 'reserve',
             reference_id: referenceId
         });
-        if (error) throw new Error(`reserveCredits failed: ${error.message}`);
+        if (error) {
+            // If unique constraint violation (code 23505), treat as idempotent success
+            if (error.code === '23505') return true;
+            throw new Error(`reserveCredits failed: ${error.message}`);
+        }
         return true;
     },
     commitCredits: async (userId, amount, referenceId) => {
@@ -259,6 +263,61 @@ module.exports = {
         });
         if (error) throw new Error(`rollbackCredits failed: ${error.message}`);
         return true;
+    },
+    reverseCreditPurchase: async (paymentId) => {
+        if (!paymentId) return { reversed: false };
+
+        // 1. Check if there was a credit purchase for this paymentId
+        const { data: originalPurchase, error: findError } = await supabaseAdmin
+            .from('credit_transactions')
+            .select('id, user_id, amount')
+            .eq('reference_id', paymentId)
+            .eq('type', 'credit')
+            .maybeSingle();
+
+        if (findError) {
+            console.error('[credits] Failed to look up credit purchase for refund:', findError.message);
+            throw new Error(`Failed to query credit transaction: ${findError.message}`);
+        }
+
+        if (!originalPurchase) {
+            // Payment was not a credit pack (e.g. was a subscription or LTD plan)
+            return { reversed: false, reason: 'not_a_credit_pack' };
+        }
+
+        // 2. Check if this refund has already been recorded (idempotency)
+        const { data: existingRefund, error: refundCheckErr } = await supabaseAdmin
+            .from('credit_transactions')
+            .select('id')
+            .eq('reference_id', paymentId)
+            .eq('type', 'refund')
+            .maybeSingle();
+
+        if (existingRefund) {
+            return { reversed: true, alreadyReversed: true };
+        }
+
+        // 3. Deduct the credited amount as a refund entry in the ledger
+        const creditAmountToReverse = originalPurchase.amount; // e.g. 50
+        const { error: insertRefundError } = await supabaseAdmin
+            .from('credit_transactions')
+            .insert({
+                user_id: originalPurchase.user_id,
+                type: 'refund',
+                amount: -creditAmountToReverse, // Offsets the positive credit
+                balance_after: 0,
+                source: 'payment_refund',
+                reference_id: paymentId
+            });
+
+        if (insertRefundError) {
+            if (insertRefundError.code === '23505') return { reversed: true, alreadyReversed: true };
+            console.error('[credits] Failed to record credit purchase reversal:', insertRefundError.message);
+            throw new Error(`Failed to reverse credit purchase: ${insertRefundError.message}`);
+        }
+
+        console.log(`[credits] Successfully reversed ${creditAmountToReverse} credits for refunded payment ${paymentId}`);
+        return { reversed: true, creditsReversed: creditAmountToReverse };
     },
     recordCreditPurchase: async (userId, credits, amount, payId, ordId) => {
         return await module.exports.addCredits(userId, credits, 'razorpay', payId);

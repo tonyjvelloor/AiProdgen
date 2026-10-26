@@ -53,13 +53,68 @@ try {
         // 4. Fire Async Generation Task using @vercel/functions waitUntil
         waitUntil((async () => {
             try {
-                // ... async generation logic ...
                 const outputUrl = await callProvider({ provider, apiKey, imageBase64, prompt, userId: user.id });
-                
-                // Finalize success
+                if (!outputUrl) {
+                    throw new Error('Provider returned empty output URL');
+                }
+
+                let storagePath = outputUrl;
+
+                // If base64 data, upload to Supabase Storage product-images
+                if (outputUrl.startsWith('data:image/')) {
+                    const mime = outputUrl.match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+).*,.*/)?.[1] || 'image/png';
+                    const ext = mime.split('/')[1] || 'png';
+                    const base64Data = outputUrl.replace(/^data:image\/\w+;base64,/, '');
+                    const buffer = Buffer.from(base64Data, 'base64');
+                    const filename = `${user.id}/${runId}_${Date.now()}.${ext}`;
+
+                    const { error: uploadError } = await supabaseAdmin.storage
+                        .from('product-images')
+                        .upload(filename, buffer, { contentType: mime, upsert: true });
+
+                    if (uploadError) {
+                        throw new Error(`Failed to store generated asset in bucket: ${uploadError.message}`);
+                    }
+
+                    const { data: publicUrlData } = supabaseAdmin.storage
+                        .from('product-images')
+                        .getPublicUrl(filename);
+
+                    storagePath = publicUrlData?.publicUrl || filename;
+                }
+
+                // Insert durable record into outputs table
+                const { data: outputRecord, error: outputError } = await supabaseAdmin
+                    .from('outputs')
+                    .insert({
+                        product_id: productId || null,
+                        type: 'image',
+                        engine: provider,
+                        format: '1:1',
+                        status: 'completed',
+                        storage_path: storagePath,
+                        metadata: { prompt, run_id: runId, provider }
+                    })
+                    .select()
+                    .single();
+
+                if (outputError) {
+                    throw new Error(`Failed to persist output record: ${outputError.message}`);
+                }
+
+                // Bind as primary output for product if not yet set
+                if (productId && outputRecord?.id) {
+                    try {
+                        const { data: prod } = await supabaseAdmin.from('products').select('primary_output_id').eq('id', productId).single();
+                        if (prod && !prod.primary_output_id) {
+                            await supabaseAdmin.from('products').update({ primary_output_id: outputRecord.id }).eq('id', productId);
+                        }
+                    } catch (e) {}
+                }
+
+                // Finalize success ONLY after the asset is durably stored and recorded in database:
                 await db.updateAIRun(runId, { status: 'completed' });
                 await db.commitCredits(user.id, 1, runId);
-                // In full implementation, save outputUrl to product_assets
             } catch (err) {
                 console.error("Async Generation Failed:", err);
                 await db.updateAIRun(runId, { status: 'failed' });

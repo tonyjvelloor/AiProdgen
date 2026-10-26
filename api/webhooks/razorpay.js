@@ -59,17 +59,28 @@ async function handler(req, res) {
 
   const { supabaseAdmin, isSupabaseConfigured } = require('../../lib/supabase');
   const payment = event.payload?.payment?.entity;
-  const eventId = event.id || payment?.id || `${event.event}_${Date.now()}`;
+  // Use Razorpay's documented event identifier, header, or differentiate event types per payment
+  const eventId = req.headers['x-razorpay-event-id'] || event.id || `${event.event}_${payment?.id || Date.now()}`;
 
   // Log incoming webhook event for audit trail
   if (isSupabaseConfigured) {
-    try {
-      await supabaseAdmin.from('webhook_events').insert({
-        event_id: eventId,
-        payload: event
-      });
-    } catch (e) {
-      // Event may already be recorded in database
+    const { error: insertErr } = await supabaseAdmin.from('webhook_events').insert({
+      event_id: eventId,
+      payload: event,
+      processed: false
+    });
+
+    if (insertErr) {
+      // If event was already logged, check if it was already fulfilled
+      const { data: existingEvent } = await supabaseAdmin.from('webhook_events')
+        .select('processed')
+        .eq('event_id', eventId)
+        .maybeSingle();
+
+      if (existingEvent && existingEvent.processed) {
+        console.log(`[webhook] Event ${eventId} already processed, returning 200`);
+        return res.status(200).send('Already processed');
+      }
     }
   }
 
@@ -151,26 +162,30 @@ async function handler(req, res) {
   if (event.event === 'payment.refunded') {
     if (!payment) return res.status(200).send('Skipped: No payment entity');
 
-    try {
-      // A. Revoke Entitlement tied to this payment
-      await entitlements.revokeEntitlementByReference(payment.id);
+    if (isSupabaseConfigured) {
+      try {
+        // A. Revoke Entitlement tied to this payment
+        await entitlements.revokeEntitlementByReference(payment.id);
 
-      // B. Reverse partner referral commissions if within clawback window
-      const { reversed, needsClawback } = await referrals.reverseCommissionsForPayment(payment.id);
-      if (reversed || needsClawback) {
-        console.log(`[webhook] payment ${payment.id} refunded: ${reversed} commission(s) reversed, ${needsClawback} need manual clawback.`);
-      }
+        // B. Reverse partner referral commissions if within clawback window
+        const { reversed, needsClawback } = await referrals.reverseCommissionsForPayment(payment.id);
+        if (reversed || needsClawback) {
+          console.log(`[webhook] payment ${payment.id} refunded: ${reversed} commission(s) reversed, ${needsClawback} need manual clawback.`);
+        }
 
-      if (isSupabaseConfigured) {
-        try {
-          await supabaseAdmin.from('webhook_events')
-            .update({ processed: true, processed_at: new Date().toISOString() })
-            .eq('event_id', eventId);
-        } catch (e) {}
+        // C. Reverse Credit-Pack purchases tied to this refunded payment
+        const creditReversal = await db.reverseCreditPurchase(payment.id);
+        if (creditReversal.reversed && !creditReversal.alreadyReversed) {
+          console.log(`[webhook] payment ${payment.id} refunded: ${creditReversal.creditsReversed} credits reversed from user balance.`);
+        }
+
+        await supabaseAdmin.from('webhook_events')
+          .update({ processed: true, processed_at: new Date().toISOString() })
+          .eq('event_id', eventId);
+      } catch (refundErr) {
+        console.error('[webhook] Critical failure processing refund:', refundErr.message);
+        return res.status(500).json({ error: 'Database error processing refund.' });
       }
-    } catch (refundErr) {
-      console.error('[webhook] Critical failure processing refund:', refundErr.message);
-      return res.status(500).json({ error: 'Database error processing refund.' });
     }
   }
 

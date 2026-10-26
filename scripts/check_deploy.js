@@ -98,6 +98,23 @@ const ok = (m) => console.log(`  ok    ${m}`);
         bad(`consume_entitlement() — ${e.message}`);
     }
 
+    try {
+        // reserve_credits backs the concurrency-safe atomic credit reservation guarantee
+        // defined in migrations/008_atomic_credit_reservation.sql.
+        const { error } = await supabaseAdmin.rpc('reserve_credits', {
+            p_user_id: '00000000-0000-0000-0000-000000000000', p_amount: 1, p_reference_id: '__check_deploy_probe__'
+        });
+        if (error && error.code === 'PGRST202') {
+            missing.push('reserve_credits()');
+            bad(`reserve_credits() — ${error.message} (Apply migrations/008_atomic_credit_reservation.sql)`);
+        } else {
+            ok('reserve_credits()');
+        }
+    } catch (e) {
+        missing.push('reserve_credits()');
+        bad(`reserve_credits() — ${e.message}`);
+    }
+
     console.log('\nColumns');
     for (const [table, cols] of Object.entries(COLUMNS)) {
         for (const c of cols) {
@@ -109,8 +126,8 @@ const ok = (m) => console.log(`  ok    ${m}`);
 
     console.log('');
     if (missing.length) {
-        console.log(`${missing.length} missing object(s). Apply migrations/001_production_readiness.sql`);
-        console.log('in the Supabase SQL editor, then re-run this check.\n');
+        console.log(`${missing.length} missing object(s). Apply migrations/001_production_readiness.sql and`);
+        console.log('migrations/008_atomic_credit_reservation.sql in the Supabase SQL editor, then re-run this check.\n');
     }
     process.exit(failed ? 1 : 0);
 })().catch((e) => { console.error('\ncheck_deploy crashed:', e.message, '\n'); process.exit(1); });

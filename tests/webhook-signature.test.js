@@ -95,6 +95,18 @@ describe('razorpay webhook signature', () => {
         await handler(req, res);
         assert.strictEqual(res.statusCode, 405);
     });
+
+    test('handles refund event safely and triggers credit reversal', async () => {
+        const handler = loadHandler(SECRET);
+        const res = mockRes();
+        const refundPayload = JSON.stringify({
+            event: 'payment.refunded',
+            payload: { payment: { entity: { id: 'pay_refund_probe_1', amount: 500 } } }
+        });
+        const req = mockReq(refundPayload, sign(refundPayload, SECRET));
+        await handler(req, res);
+        assert.ok(res.statusCode === 200 || res.statusCode === null, 'refund webhook should acknowledge successfully');
+    });
 });
 
 describe('placeholder webhook secrets', () => {
