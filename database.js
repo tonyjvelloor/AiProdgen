@@ -1,5 +1,5 @@
 // database.js (Supabase Adapter)
-const { supabaseAdmin } = require('./lib/supabase');
+const { supabaseAdmin, isSupabaseConfigured } = require('./lib/supabase');
 
 // Shapes a users row for the Express app. Every field here is read from the
 // database -- an earlier version substituted a hardcoded bcrypt hash because
@@ -191,22 +191,40 @@ module.exports = {
     reserveCredits: async (userId, amount, referenceId = null) => {
         if (!userId || amount <= 0) return false;
 
-        // 1. Try atomic PostgreSQL RPC function if available (with row lock)
-        try {
+        // 1. Mandatory Atomic PostgreSQL RPC function (with row lock & unique index)
+        if (isSupabaseConfigured) {
             const { data, error } = await supabaseAdmin.rpc('reserve_credits', {
                 p_user_id: userId,
                 p_amount: amount,
                 p_reference_id: referenceId
             });
 
-            if (!error && typeof data === 'boolean') {
+            if (error) {
+                // In production, we FAIL CLOSED immediately on RPC errors.
+                // A non-atomic fallback is strictly prohibited in production and only
+                // allowed in local development/test environments when migration 008 is pending.
+                const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+                const allowFallback = !isProduction && (
+                    process.env.ALLOW_UNSAFE_CREDIT_FALLBACK === 'true' ||
+                    process.env.NODE_ENV === 'test' ||
+                    error.code === 'PGRST202'
+                );
+
+                if (!allowFallback) {
+                    console.error(`[credits] reserve_credits RPC failed: ${error.message} (code: ${error.code})`);
+                    throw new Error(`reserveCredits failed: atomic reservation RPC unavailable (${error.message})`);
+                }
+                console.warn(`[credits] Warning: reserve_credits RPC missing (${error.message}). Using test fallback.`);
+            } else if (typeof data === 'boolean') {
                 return data;
             }
-        } catch (rpcErr) {
-            // Fall back to application-layer transaction logic
+        } else {
+            if (process.env.NODE_ENV === 'production') {
+                throw new Error('reserveCredits failed: Supabase is not configured in production environment.');
+            }
         }
 
-        // 2. Idempotency check: if reservation already exists for this reference_id, don't charge again
+        // 2. Application-layer fallback logic (development & offline testing only)
         if (referenceId) {
             const { data: existing } = await supabaseAdmin.from('credit_transactions')
                 .select('id')
@@ -360,8 +378,11 @@ module.exports = {
             amount,
             currency
         }, { onConflict: 'razorpay_payment_id' });
-        if (error) console.error('recordPayment failed:', error.message);
-        return !error;
+        if (error) {
+            console.error('recordPayment failed:', error.message);
+            throw new Error(`recordPayment failed: ${error.message}`);
+        }
+        return true;
     },
     // Sum of what this user's runs have cost the platform in the trailing
     // window. Backs the spend ceiling in PolicyEngine, so a pricing mistake is

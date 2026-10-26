@@ -3,6 +3,8 @@ try {
     const { validateProviderKey, callProvider } = require('../lib/providers');
     const { requireAuth } = require('../lib/auth');
     const { supabaseAdmin } = require('../lib/supabase');
+    const ProductService = require('../lib/product_service');
+    const WorkspaceService = require('../lib/workspace_service');
     const keyVault = require('../lib/keyVault');
     const db = require('../database');
 
@@ -13,6 +15,29 @@ try {
         if (!user) return; // response already sent
 
         const { productId, provider, model, prompt, imageBase64 } = req.body;
+
+        // Strict product ownership verification:
+        // Protects against unauthorized association, generation, or repointing of other users' products
+        let verifiedProduct = null;
+        if (productId) {
+            try {
+                const product = await ProductService.getProductById(productId);
+                if (!product) {
+                    return res.status(404).json({ error: 'Product not found.' });
+                }
+                const workspace = await WorkspaceService.getOrCreateWorkspace(user.id);
+                if (product.workspace_id !== workspace.id) {
+                    return res.status(403).json({ error: 'Unauthorized: Product does not belong to your workspace.' });
+                }
+                verifiedProduct = product;
+            } catch (err) {
+                if (err.message && err.message.includes('not found')) {
+                    return res.status(404).json({ error: 'Product not found.' });
+                }
+                console.error('[generate] Product verification error:', err);
+                return res.status(500).json({ error: 'Failed to verify product ownership.' });
+            }
+        }
 
         // 1. Check outputs pool
         const creditsAvailable = await db.getUserCredits(user.id);
@@ -103,13 +128,24 @@ try {
                 }
 
                 // Bind as primary output for product if not yet set
-                if (productId && outputRecord?.id) {
+                if (verifiedProduct && outputRecord?.id) {
                     try {
-                        const { data: prod } = await supabaseAdmin.from('products').select('primary_output_id').eq('id', productId).single();
+                        const { data: prod } = await supabaseAdmin
+                            .from('products')
+                            .select('primary_output_id')
+                            .eq('id', verifiedProduct.id)
+                            .eq('workspace_id', verifiedProduct.workspace_id)
+                            .single();
                         if (prod && !prod.primary_output_id) {
-                            await supabaseAdmin.from('products').update({ primary_output_id: outputRecord.id }).eq('id', productId);
+                            await supabaseAdmin
+                                .from('products')
+                                .update({ primary_output_id: outputRecord.id })
+                                .eq('id', verifiedProduct.id)
+                                .eq('workspace_id', verifiedProduct.workspace_id);
                         }
-                    } catch (e) {}
+                    } catch (e) {
+                        console.warn(`[generate] Warning: could not set primary_output_id: ${e.message}`);
+                    }
                 }
 
                 // Finalize success ONLY after the asset is durably stored and recorded in database:

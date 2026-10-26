@@ -103,11 +103,23 @@ async function handler(req, res) {
     }
 
     try {
-      // A. Credit Pack Grants
+      // 1. Record the financial payment record FIRST (idempotent upsert by payment ID)
+      await db.recordPayment({
+        paymentId: payment.id,
+        orderId: payment.order_id,
+        userId,
+        kind: creditsToGrant ? 'credits' : (featureOrProduct ? 'feature' : 'unknown'),
+        credits: creditsToGrant,
+        amount: payment.amount,
+        currency: payment.currency || 'INR'
+      });
+
+      // 2. Fulfill Credit Pack Grants if applicable
       if (creditsToGrant && creditsToGrant > 0) {
         const { data: existingTx } = await supabaseAdmin.from('credit_transactions')
           .select('id')
           .eq('reference_id', payment.id)
+          .eq('type', 'credit')
           .maybeSingle();
 
         if (!existingTx) {
@@ -118,20 +130,11 @@ async function handler(req, res) {
             payment.id,
             payment.order_id
           );
-          await db.recordPayment({
-            paymentId: payment.id,
-            orderId: payment.order_id,
-            userId,
-            kind: 'credits',
-            credits: creditsToGrant,
-            amount: payment.amount,
-            currency: payment.currency || 'INR'
-          });
           console.log(`[webhook] Successfully granted ${creditsToGrant} credits to user ${userId}`);
         }
       }
 
-      // B. Entitlement / Feature Grants
+      // 3. Fulfill Entitlement / Feature Grants if applicable
       if (featureOrProduct) {
         await entitlements.grantEntitlement({
           userId: userId,
@@ -143,13 +146,15 @@ async function handler(req, res) {
         console.log(`[webhook] Successfully granted entitlement ${featureOrProduct} to user ${userId}`);
       }
 
-      // Mark webhook processed in audit ledger
+      // 4. Mark webhook processed in audit ledger
       if (isSupabaseConfigured) {
-        try {
-          await supabaseAdmin.from('webhook_events')
-            .update({ processed: true, processed_at: new Date().toISOString() })
-            .eq('event_id', eventId);
-        } catch (e) {}
+        const { error: updateErr } = await supabaseAdmin.from('webhook_events')
+          .update({ processed: true, processed_at: new Date().toISOString() })
+          .eq('event_id', eventId);
+        if (updateErr) {
+          console.error('[webhook] Failed to mark webhook_event as processed:', updateErr.message);
+          throw new Error(`Failed to update webhook event status: ${updateErr.message}`);
+        }
       }
     } catch (grantErr) {
       console.error('[webhook] Critical failure granting purchase benefits:', grantErr.message);
@@ -179,9 +184,13 @@ async function handler(req, res) {
           console.log(`[webhook] payment ${payment.id} refunded: ${creditReversal.creditsReversed} credits reversed from user balance.`);
         }
 
-        await supabaseAdmin.from('webhook_events')
+        const { error: updateErr } = await supabaseAdmin.from('webhook_events')
           .update({ processed: true, processed_at: new Date().toISOString() })
           .eq('event_id', eventId);
+        if (updateErr) {
+          console.error('[webhook] Failed to mark refund webhook_event as processed:', updateErr.message);
+          throw new Error(`Failed to update refund webhook event status: ${updateErr.message}`);
+        }
       } catch (refundErr) {
         console.error('[webhook] Critical failure processing refund:', refundErr.message);
         return res.status(500).json({ error: 'Database error processing refund.' });

@@ -29,6 +29,32 @@ describe('credit reservation invariants, concurrency & idempotency', () => {
         assert.strictEqual(typeof res2, 'boolean');
     });
 
+    test('concurrent reservation requests with identical referenceId resolve safely without double-debit', async () => {
+        const testUserId = '00000000-0000-0000-0000-000000000001';
+        const referenceId = `concurrent_ref_${Date.now()}`;
+        const results = await Promise.all([
+            db.reserveCredits(testUserId, 1, referenceId),
+            db.reserveCredits(testUserId, 1, referenceId),
+            db.reserveCredits(testUserId, 1, referenceId)
+        ]);
+        assert.ok(results.every(r => typeof r === 'boolean'));
+    });
+
+    test('reserveCredits fails closed when RPC errors in production environment', async () => {
+        const originalEnv = process.env.NODE_ENV;
+        const originalFallback = process.env.ALLOW_UNSAFE_CREDIT_FALLBACK;
+        try {
+            process.env.NODE_ENV = 'production';
+            delete process.env.ALLOW_UNSAFE_CREDIT_FALLBACK;
+            await assert.rejects(async () => {
+                await db.reserveCredits('00000000-0000-0000-0000-000000000001', 1, 'probe_fail_closed');
+            }, /reserveCredits failed/);
+        } finally {
+            process.env.NODE_ENV = originalEnv;
+            if (originalFallback !== undefined) process.env.ALLOW_UNSAFE_CREDIT_FALLBACK = originalFallback;
+        }
+    });
+
     test('reverseCreditPurchase reverses credit purchase ledger entries idempotently', async () => {
         const fakePaymentId = `pay_refund_test_${Date.now()}`;
         

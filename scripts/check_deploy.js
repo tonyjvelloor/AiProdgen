@@ -101,14 +101,22 @@ const ok = (m) => console.log(`  ok    ${m}`);
     try {
         // reserve_credits backs the concurrency-safe atomic credit reservation guarantee
         // defined in migrations/008_atomic_credit_reservation.sql.
-        const { error } = await supabaseAdmin.rpc('reserve_credits', {
+        const { data, error } = await supabaseAdmin.rpc('reserve_credits', {
             p_user_id: '00000000-0000-0000-0000-000000000000', p_amount: 1, p_reference_id: '__check_deploy_probe__'
         });
-        if (error && error.code === 'PGRST202') {
+        if (error) {
             missing.push('reserve_credits()');
-            bad(`reserve_credits() — ${error.message} (Apply migrations/008_atomic_credit_reservation.sql)`);
-        } else {
+            if (error.code === 'PGRST202') {
+                bad(`reserve_credits() — Missing from schema cache. (Apply migrations/008_atomic_credit_reservation.sql)`);
+            } else {
+                bad(`reserve_credits() — RPC invocation failed: ${error.message} (code: ${error.code})`);
+            }
+        } else if (data === false) {
+            // Function exists, execution succeeded, and correctly returned false for dummy user
             ok('reserve_credits()');
+        } else {
+            missing.push('reserve_credits()');
+            bad(`reserve_credits() — Unexpected probe result: expected false, got ${JSON.stringify(data)}`);
         }
     } catch (e) {
         missing.push('reserve_credits()');

@@ -24,6 +24,8 @@ where type = 'refund' and reference_id is not null;
 create or replace function reserve_credits(p_user_id uuid, p_amount integer, p_reference_id text default null)
 returns boolean
 language plpgsql
+security definer
+set search_path = public
 as $$
 declare
     v_balance integer;
@@ -33,8 +35,9 @@ begin
         return false;
     end if;
 
-    -- 1. FIRST: Acquire user row lock to serialize all concurrent operations for this user
-    perform 1 from users where id = p_user_id for update;
+    -- 1. FIRST: Acquire user row lock to serialize all concurrent operations for this user.
+    -- Validates that user exists and is active (coalesce(is_active, true) = true).
+    perform 1 from users where id = p_user_id and coalesce(is_active, true) = true for update;
     if not found then
         return false;
     end if;
