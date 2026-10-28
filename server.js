@@ -1180,6 +1180,8 @@ app.post('/api/plan/verify', auth.requireAuth, async (req, res) => {
             return res.status(400).json({ error: 'Order not found or already processed' });
         }
 
+        const planConfig = getPlanConfig(planId);
+
         // Activate plan
         const user = await db.getUserByEmail(req.user.email);
         if (!user) {
@@ -1191,19 +1193,9 @@ app.post('/api/plan/verify', auth.requireAuth, async (req, res) => {
         const planAmountCents = Number(order.amount);
         const planCurrency = order.currency;
 
+        let creditsGranted = 0;
         try {
             await db.setUserPlan(user.id, planId, billingCycle);
-
-            // Also initialize upscale credits based on plan
-            const planConfig = getPlanConfig(planId);
-            await db.initUserCredits(user.id);
-            await db.addCredits(user.id, planConfig.upscale);
-
-            // Re-derive feature grants (bulk/commercial/watermark-removal/
-            // templates) from the plan just activated. Additive and idempotent --
-            // does not touch credits or BYOK, only which paid features unlock.
-            await entitlements.seedPlanEntitlements(user.id, planId, planConfig)
-                .catch(e => console.error('[entitlements] seed failed on plan verify:', e.message));
 
             await db.recordPayment({
                 paymentId: razorpay_payment_id, orderId: razorpay_order_id,
@@ -1212,8 +1204,24 @@ app.post('/api/plan/verify', auth.requireAuth, async (req, res) => {
                 amount: planAmountCents,
                 currency: planCurrency
             });
+
+            await db.initUserCredits(user.id);
+            if (planConfig.upscale > 0) {
+                await db.addCredits(user.id, planConfig.upscale, 'purchase', razorpay_payment_id);
+                creditsGranted += planConfig.upscale;
+            }
+
+            // Re-derive feature grants (bulk/commercial/watermark-removal/
+            // templates) from the plan just activated. Additive and idempotent --
+            // does not touch credits or BYOK, only which paid features unlock.
+            await entitlements.seedPlanEntitlements(user.id, planId, planConfig)
+                .catch(e => console.error('[entitlements] seed failed on plan verify:', e.message));
         } catch (fulfillmentError) {
-            // Partial-failure recovery: re-insert pending order so webhook or retry can reconcile
+            // Partial-failure recovery: rollback any credits granted in this failed attempt
+            if (creditsGranted > 0) {
+                await db.rollbackCredits(user.id, creditsGranted, `${razorpay_payment_id}:rollback`).catch(() => {});
+            }
+            // Re-insert pending order so webhook or retry can reconcile
             console.error(`[plan/verify] Partial failure for order ${razorpay_order_id}:`, fulfillmentError.message);
             await db.createPendingOrder(razorpay_order_id, req.user.email, order.amount, order.currency).catch(() => {});
             throw fulfillmentError;
@@ -2041,6 +2049,7 @@ app.post('/api/payment/create-order', async (req, res) => {
         // hardcoded 47, which was wrong for any non-USD order.
         const amountValue = amount !== undefined ? Number(amount) : allowed[0];
         const amountInSmallestUnit = Math.round(amountValue * 100);
+        const planId = planForOrder({ amount: amountInSmallestUnit, currency }) || 'hobbyist_ltd';
 
         const order = await razorpay.orders.create({
             amount: amountInSmallestUnit,
@@ -2048,7 +2057,7 @@ app.post('/api/payment/create-order', async (req, res) => {
             receipt: `order_${Date.now()}`,
             notes: {
                 type: 'acquisition_lifetime',
-                plan: 'hobbyist_ltd',
+                plan: planId,
                 email
             }
         });

@@ -96,33 +96,41 @@ async function handler(req, res) {
     let userId = notes.user_id || notes.userId;
     let email = notes.email || payment.email;
     const creditsToGrant = notes.credits ? parseInt(notes.credits, 10) : null;
-    let planId = notes.plan || (notes.type === 'plan_subscription' ? notes.plan : null);
+    let planId = null;
     const featureOrProduct = notes.product_id || notes.feature;
     const quantity = notes.quantity ? parseInt(notes.quantity, 10) : null;
+
+    // Resolve pending order if exists
+    let pendingOrder = null;
+    if (payment.order_id) {
+      pendingOrder = await db.getPendingOrder(payment.order_id);
+      if (pendingOrder) {
+        email = email || pendingOrder.email;
+        planId = planForOrder(pendingOrder);
+      }
+    }
+
+    // Derive plan from payment amount if not set from pending order
+    if (!planId) {
+      planId = planForOrder({ amount: payment.amount, currency: payment.currency || 'USD' });
+    }
+
+    // Fall back to notes only if amount did not match
+    if (!planId) {
+      planId = notes.plan || (notes.type === 'plan_subscription' ? notes.plan : null);
+    }
 
     // Check if this payment was already fulfilled
     if (isSupabaseConfigured) {
       const { data: existingPayment } = await supabaseAdmin
         .from('payments')
-        .select('razorpay_payment_id, user_id, plan_id')
+        .select('razorpay_payment_id, user_id, plan_id, status')
         .eq('razorpay_payment_id', payment.id)
         .maybeSingle();
 
-      if (existingPayment) {
+      if (existingPayment && (existingPayment.status === 'fulfilled' || !existingPayment.status)) {
         console.log(`[webhook] payment ${payment.id} already fulfilled in ledger`);
         return res.status(200).send('Already processed');
-      }
-    }
-
-    // Resolve pending order if exists
-    let pendingOrder = null;
-    if (isSupabaseConfigured && payment.order_id) {
-      pendingOrder = await db.getPendingOrder(payment.order_id);
-      if (pendingOrder) {
-        email = email || pendingOrder.email;
-        if (!planId) {
-          planId = planForOrder(pendingOrder);
-        }
       }
     }
 
@@ -135,10 +143,10 @@ async function handler(req, res) {
     }
 
     // Reconcile guest lifetime acquisition checkout if user not yet registered (browser closed after paying)
-    if (!userId && email && isSupabaseConfigured && (notes.type === 'acquisition_lifetime' || isLifetimeOfferOrder(pendingOrder))) {
+    if (!userId && email && (notes.type === 'acquisition_lifetime' || isLifetimeOfferOrder(pendingOrder))) {
       try {
         const auth = require('../../auth');
-        const emailService = require('../../lib/email');
+        const emailService = require('../../email');
         const credentials = await auth.registerUser(
           email,
           payment.id,
@@ -149,8 +157,12 @@ async function handler(req, res) {
         const newUser = await db.getUserByEmail(email);
         if (newUser) {
           userId = newUser.id;
-          if (credentials?.password) {
-            await emailService.sendCredentialsEmail(email, credentials.password).catch(e => console.error(e));
+          if (credentials?.password && typeof emailService.sendCredentialsEmail === 'function') {
+            try {
+              await emailService.sendCredentialsEmail(email, credentials.password);
+            } catch (mailErr) {
+              console.error('[webhook] sendCredentialsEmail failed (non-blocking):', mailErr.message);
+            }
           }
         }
       } catch (regErr) {
@@ -169,25 +181,14 @@ async function handler(req, res) {
     }
 
     try {
-      // 1. Record the financial payment record FIRST (idempotent upsert by payment ID)
-      await db.recordPayment({
-        paymentId: payment.id,
-        orderId: payment.order_id,
-        userId,
-        email,
-        kind: planId ? 'plan' : (creditsToGrant ? 'credits' : (featureOrProduct ? 'feature' : 'unknown')),
-        planId: planId || null,
-        credits: creditsToGrant,
-        amount: payment.amount,
-        currency: payment.currency || 'INR'
-      });
-
-      // 2. Fulfill Plan Subscriptions / Lifetime Deals (Browser closed after checkout)
+      // 1. Fulfill Plan Subscriptions / Lifetime Deals (Browser closed after checkout)
       if (planId) {
         const planConfig = getPlanConfig(planId);
         await db.setUserPlan(userId, planId, 'lifetime');
         await db.initUserCredits(userId);
-        await db.addCredits(userId, planConfig.upscale);
+        if (planConfig.upscale > 0) {
+          await db.addCredits(userId, planConfig.upscale, 'purchase', payment.id);
+        }
         await entitlements.seedPlanEntitlements(userId, planId, planConfig)
           .catch(e => console.error('[webhook] seed entitlements error:', e.message));
 
@@ -207,6 +208,54 @@ async function handler(req, res) {
 
         console.log(`[webhook] Successfully fulfilled plan ${planId} for user ${userId} (${email})`);
       }
+
+      // 2. Fulfill Credit Pack Grants if applicable
+      if (creditsToGrant && creditsToGrant > 0) {
+        let existingTx = null;
+        if (isSupabaseConfigured) {
+          const { data } = await supabaseAdmin.from('credit_transactions')
+            .select('id')
+            .eq('reference_id', payment.id)
+            .eq('type', 'credit')
+            .maybeSingle();
+          existingTx = data;
+        }
+
+        if (!existingTx) {
+          await db.recordCreditPurchase(
+            userId,
+            creditsToGrant,
+            payment.amount,
+            payment.id,
+            payment.order_id
+          );
+        }
+      }
+
+      // 3. Fulfill standalone feature unlocks if applicable
+      if (featureOrProduct) {
+        await entitlements.grantEntitlement({
+          userId,
+          feature: featureOrProduct,
+          quantity,
+          source: entitlements.SOURCES.PURCHASE,
+          referenceId: payment.id
+        }).catch(e => console.error('[webhook] grant feature error:', e.message));
+      }
+
+      // 4. Record the financial payment record in ledger upon successful fulfillment
+      await db.recordPayment({
+        paymentId: payment.id,
+        orderId: payment.order_id,
+        userId,
+        email,
+        kind: planId ? 'plan' : (creditsToGrant ? 'credits' : (featureOrProduct ? 'feature' : 'unknown')),
+        planId: planId || null,
+        credits: creditsToGrant,
+        amount: payment.amount,
+        currency: payment.currency || 'INR',
+        status: 'fulfilled'
+      });
 
       // 3. Fulfill Credit Pack Grants if applicable
       if (creditsToGrant && creditsToGrant > 0) {

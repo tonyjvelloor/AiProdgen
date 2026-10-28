@@ -195,9 +195,33 @@ module.exports = {
         };
     },
     initUserCredits: async (userId) => { 
+        if (!userId) return 0;
+        if (isSupabaseConfigured) {
+            const { data: existingBonus } = await supabaseAdmin.from('credit_transactions')
+                .select('id')
+                .eq('user_id', userId)
+                .eq('source', 'bonus')
+                .eq('reference_id', 'signup')
+                .maybeSingle();
+            if (existingBonus) {
+                return await module.exports.getUserCredits(userId);
+            }
+        }
         return await module.exports.addCredits(userId, 10, 'bonus', 'signup'); 
     },
     addCredits: async (userId, credits, referenceType = 'purchase', referenceId = null) => {
+        if (!userId || !credits) return await module.exports.getUserCredits(userId);
+        if (referenceId && isSupabaseConfigured) {
+            const { data: existing } = await supabaseAdmin.from('credit_transactions')
+                .select('id')
+                .eq('user_id', userId)
+                .eq('reference_id', referenceId)
+                .eq('type', 'credit')
+                .maybeSingle();
+            if (existing) {
+                return await module.exports.getUserCredits(userId);
+            }
+        }
         const { error } = await supabaseAdmin.from('credit_transactions').insert({
             user_id: userId,
             type: 'credit',
@@ -206,7 +230,12 @@ module.exports = {
             source: referenceType,
             reference_id: referenceId
         });
-        if (error) throw new Error(`addCredits failed: ${error.message}`);
+        if (error) {
+            if (error.code === '23505' || error.message?.includes('duplicate key') || error.message?.includes('credit_transactions_grant_uniq')) {
+                return await module.exports.getUserCredits(userId);
+            }
+            throw new Error(`addCredits failed: ${error.message}`);
+        }
         return await module.exports.getUserCredits(userId);
     },
     useCredits: async (userId, creditsToUse = 1, referenceType = 'generation', referenceId = null) => {
@@ -629,6 +658,7 @@ module.exports = {
 
     // ============ UGC / Pending Orders / Misc ============
     createPendingOrder: async (razorpayOrderId, email, amount, currency = 'INR') => {
+        if (!isSupabaseConfigured) return true;
         const { error } = await supabaseAdmin.from('pending_orders')
             .upsert({ razorpay_order_id: razorpayOrderId, email, amount, currency },
                     { onConflict: 'razorpay_order_id' });
@@ -636,6 +666,7 @@ module.exports = {
         return true;
     },
     getPendingOrder: async (razorpayOrderId) => {
+        if (!isSupabaseConfigured) return null;
         const { data } = await supabaseAdmin.from('pending_orders')
             .select('*')
             .eq('razorpay_order_id', razorpayOrderId)
@@ -643,6 +674,7 @@ module.exports = {
         return data || null;
     },
     deletePendingOrder: async (razorpayOrderId) => {
+        if (!isSupabaseConfigured) return true;
         const { error } = await supabaseAdmin.from('pending_orders')
             .delete()
             .eq('razorpay_order_id', razorpayOrderId);
@@ -652,6 +684,7 @@ module.exports = {
     // replayed calls for the same order, exactly one gets the row back. That
     // is what makes a payment single-use.
     claimPendingOrder: async (razorpayOrderId, email) => {
+        if (!isSupabaseConfigured) return null;
         const { data, error } = await supabaseAdmin.from('pending_orders')
             .delete()
             .eq('razorpay_order_id', razorpayOrderId)
