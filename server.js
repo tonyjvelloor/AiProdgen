@@ -707,6 +707,26 @@ const PLANS = {
 // Backward-compat: map legacy plan names to new ones
 const PLAN_ALIASES = { free: 'free_explorer', creator: 'hobbyist_ltd', pro: 'pro_founder_ltd', agency: 'agency_ltd' };
 
+const PLAN_TIER_RANK = {
+    free_explorer: 0,
+    free: 0,
+    hobbyist_ltd: 1,
+    creator: 1,
+    pro_founder_ltd: 2,
+    pro: 2,
+    agency_ltd: 3,
+    agency: 3,
+    lifetime_founder: 4
+};
+
+function shouldUpgradePlan(currentPlan, targetPlan) {
+    if (!targetPlan) return false;
+    if (!currentPlan) return true;
+    const currentRank = PLAN_TIER_RANK[PLAN_ALIASES[currentPlan] || currentPlan] || 0;
+    const targetRank = PLAN_TIER_RANK[PLAN_ALIASES[targetPlan] || targetPlan] || 0;
+    return targetRank >= currentRank;
+}
+
 const PLAN_PRICES = {
     hobbyist_ltd: { onetime_usd: 4900 },  // $49
     pro_founder_ltd: { onetime_usd: 9700 },  // $97
@@ -1195,14 +1215,27 @@ app.post('/api/plan/verify', auth.requireAuth, async (req, res) => {
 
         let creditsGranted = 0;
         try {
-            await db.setUserPlan(user.id, planId, billingCycle);
+            const currentPlan = (await db.getUserPlan(user.id))?.plan;
+            const willUpgrade = shouldUpgradePlan(currentPlan, planId);
+            if (willUpgrade) {
+                await db.setUserPlan(user.id, planId, billingCycle);
+                // Re-derive feature grants (bulk/commercial/watermark-removal/
+                // templates) from the plan just activated.
+                // Do NOT swallow errors with .catch() so required feature grants
+                // fail safely and remain retryable.
+                await entitlements.seedPlanEntitlements(user.id, planId, planConfig);
+            } else {
+                console.log(`[plan/verify] User ${user.id} is currently on ${currentPlan}; skipping plan downgrade to ${planId}`);
+            }
 
             await db.recordPayment({
                 paymentId: razorpay_payment_id, orderId: razorpay_order_id,
                 userId: user.id, email: user.email,
                 kind: 'plan', planId,
                 amount: planAmountCents,
-                currency: planCurrency
+                currency: planCurrency,
+                status: 'captured',
+                fulfillmentStatus: 'pending'
             });
 
             await db.initUserCredits(user.id);
@@ -1211,11 +1244,19 @@ app.post('/api/plan/verify', auth.requireAuth, async (req, res) => {
                 creditsGranted += planConfig.upscale;
             }
 
-            // Re-derive feature grants (bulk/commercial/watermark-removal/
-            // templates) from the plan just activated. Additive and idempotent --
-            // does not touch credits or BYOK, only which paid features unlock.
-            await entitlements.seedPlanEntitlements(user.id, planId, planConfig)
-                .catch(e => console.error('[entitlements] seed failed on plan verify:', e.message));
+            if (willUpgrade) {
+                await entitlements.seedPlanEntitlements(user.id, planId, planConfig);
+            }
+
+            await db.recordPayment({
+                paymentId: razorpay_payment_id, orderId: razorpay_order_id,
+                userId: user.id, email: user.email,
+                kind: 'plan', planId,
+                amount: planAmountCents,
+                currency: planCurrency,
+                status: 'captured',
+                fulfillmentStatus: 'fulfilled'
+            });
         } catch (fulfillmentError) {
             // Partial-failure recovery: rollback any credits granted in this failed attempt
             if (creditsGranted > 0) {
@@ -2135,12 +2176,19 @@ app.post('/api/payment/verify', async (req, res) => {
                 .catch(e => console.error('[referrals] attribution failed on lifetime purchase:', e.message));
 
             const purchasedPlanId = planForOrder(pendingOrder) || 'hobbyist_ltd';
-            await db.setUserPlan(newUser.id, purchasedPlanId, 'lifetime');
+            const currentPlan = (await db.getUserPlan(newUser.id))?.plan;
+            const willUpgrade = shouldUpgradePlan(currentPlan, purchasedPlanId);
+            if (willUpgrade) {
+                await db.setUserPlan(newUser.id, purchasedPlanId, 'lifetime');
+            }
             const purchasedPlanConfig = getPlanConfig(purchasedPlanId);
             await db.initUserCredits(newUser.id);
-            await db.addCredits(newUser.id, purchasedPlanConfig.upscale);
-            await entitlements.seedPlanEntitlements(newUser.id, purchasedPlanId, purchasedPlanConfig)
-                .catch(e => console.error('[entitlements] seed failed on lifetime purchase:', e.message));
+            if (purchasedPlanConfig.upscale > 0) {
+                await db.addCredits(newUser.id, purchasedPlanConfig.upscale, 'purchase', razorpay_payment_id);
+            }
+            if (willUpgrade) {
+                await entitlements.seedPlanEntitlements(newUser.id, purchasedPlanId, purchasedPlanConfig);
+            }
 
             // This is the primary acquisition offer -- the highest-volume
             // revenue path -- but unlike the credit-pack and in-app-upgrade
@@ -2151,7 +2199,9 @@ app.post('/api/payment/verify', async (req, res) => {
                 paymentId: razorpay_payment_id, orderId: razorpay_order_id,
                 userId: newUser.id, email: newUser.email,
                 kind: 'plan', planId: purchasedPlanId,
-                amount: pendingOrder.amount, currency: pendingOrder.currency || 'USD'
+                amount: pendingOrder.amount, currency: pendingOrder.currency || 'USD',
+                status: 'captured',
+                fulfillmentStatus: 'fulfilled'
             });
 
             // Records a commission if attributeReferral (above) found an

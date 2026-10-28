@@ -1,5 +1,10 @@
 // database.js (Supabase Adapter)
-const { supabaseAdmin, isSupabaseConfigured } = require('./lib/supabase');
+const supabase = require('./lib/supabase');
+let { supabaseAdmin, isSupabaseConfigured } = supabase;
+const getAdmin = () => supabase.supabaseAdmin || supabaseAdmin;
+
+// Coalesce concurrent in-process signup bonus initializations for the same user
+const inflightBonusInits = new Map();
 
 // Shapes a users row for the Express app. Every field here is read from the
 // database -- an earlier version substituted a hardcoded bcrypt hash because
@@ -86,17 +91,27 @@ module.exports = {
 
     // ============ Plan / Entitlement Functions ============
     getUserPlan: async (userId) => {
-        const { data } = await supabaseAdmin.from('users')
-            .select('id, plan, billing_cycle, monthly_gen_count, monthly_ugc_count, usage_period_start')
-            .eq('id', userId)
-            .single();
-        const row = await rollUsagePeriodIfStale(data);
-        return {
-            plan: row?.plan || 'free_explorer',
-            billing_cycle: row?.billing_cycle || null,
-            monthly_gen_count: row?.monthly_gen_count || 0,
-            monthly_ugc_count: row?.monthly_ugc_count || 0
-        };
+        if (!isSupabaseConfigured || !userId) {
+            return { plan: 'free_explorer', billing_cycle: null, monthly_gen_count: 0, monthly_ugc_count: 0 };
+        }
+        try {
+            const { data, error } = await supabaseAdmin.from('users')
+                .select('id, plan, billing_cycle, monthly_gen_count, monthly_ugc_count, usage_period_start')
+                .eq('id', userId)
+                .single();
+            if (error || !data) {
+                return { plan: 'free_explorer', billing_cycle: null, monthly_gen_count: 0, monthly_ugc_count: 0 };
+            }
+            const row = await rollUsagePeriodIfStale(data);
+            return {
+                plan: row?.plan || 'free_explorer',
+                billing_cycle: row?.billing_cycle || null,
+                monthly_gen_count: row?.monthly_gen_count || 0,
+                monthly_ugc_count: row?.monthly_ugc_count || 0
+            };
+        } catch {
+            return { plan: 'free_explorer', billing_cycle: null, monthly_gen_count: 0, monthly_ugc_count: 0 };
+        }
     },
     setUserPlan: async (userId, plan, billingCycle = 'monthly') => {
         // This was a no-op returning true, so a verified Razorpay payment logged
@@ -196,18 +211,29 @@ module.exports = {
     },
     initUserCredits: async (userId) => { 
         if (!userId) return 0;
-        if (isSupabaseConfigured) {
-            const { data: existingBonus } = await supabaseAdmin.from('credit_transactions')
-                .select('id')
-                .eq('user_id', userId)
-                .eq('source', 'bonus')
-                .eq('reference_id', 'signup')
-                .maybeSingle();
-            if (existingBonus) {
-                return await module.exports.getUserCredits(userId);
-            }
+        if (inflightBonusInits.has(userId)) {
+            return await inflightBonusInits.get(userId);
         }
-        return await module.exports.addCredits(userId, 10, 'bonus', 'signup'); 
+        const promise = (async () => {
+            try {
+                if (isSupabaseConfigured) {
+                    const { data: existingBonus } = await supabaseAdmin.from('credit_transactions')
+                        .select('id')
+                        .eq('user_id', userId)
+                        .eq('source', 'bonus')
+                        .eq('reference_id', 'signup')
+                        .maybeSingle();
+                    if (existingBonus) {
+                        return await module.exports.getUserCredits(userId);
+                    }
+                }
+                return await module.exports.addCredits(userId, 10, 'bonus', 'signup'); 
+            } finally {
+                inflightBonusInits.delete(userId);
+            }
+        })();
+        inflightBonusInits.set(userId, promise);
+        return await promise;
     },
     addCredits: async (userId, credits, referenceType = 'purchase', referenceId = null) => {
         if (!userId || !credits) return await module.exports.getUserCredits(userId);
@@ -231,7 +257,10 @@ module.exports = {
             reference_id: referenceId
         });
         if (error) {
-            if (error.code === '23505' || error.message?.includes('duplicate key') || error.message?.includes('credit_transactions_grant_uniq')) {
+            if (error.code === '23505' || 
+                error.message?.includes('duplicate key') || 
+                error.message?.includes('credit_transactions_grant_uniq') ||
+                error.message?.includes('credit_transactions_bonus_uniq')) {
                 return await module.exports.getUserCredits(userId);
             }
             throw new Error(`addCredits failed: ${error.message}`);
@@ -432,9 +461,18 @@ module.exports = {
     // Every captured payment is written here so gross margin is computable.
     // Idempotent on razorpay_payment_id: the checkout callback and the webhook
     // can both report the same payment.
-    recordPayment: async ({ paymentId, orderId, userId, email, kind, planId, credits, amount, currency = 'INR' }) => {
+    recordPayment: async ({ paymentId, orderId, userId, email, kind, planId, credits, amount, currency = 'INR', status = 'captured', fulfillmentStatus = 'fulfilled' }) => {
         if (!paymentId) return false;
-        const { error } = await supabaseAdmin.from('payments').upsert({
+        // Keep financial status as 'captured' (unless explicitly set to refunded/failed)
+        // so getRevenue() preserves financial reporting accuracy.
+        // Product fulfillment state is persisted in fulfillment_status ('fulfilled').
+        let finStatus = status;
+        let fulStatus = fulfillmentStatus;
+        if (status === 'fulfilled') {
+            finStatus = 'captured';
+            fulStatus = 'fulfilled';
+        }
+        const { error } = await getAdmin().from('payments').upsert({
             razorpay_payment_id: paymentId,
             razorpay_order_id: orderId || null,
             user_id: userId || null,
@@ -443,7 +481,9 @@ module.exports = {
             plan_id: planId || null,
             credits: credits || null,
             amount,
-            currency
+            currency,
+            status: finStatus,
+            fulfillment_status: fulStatus
         }, { onConflict: 'razorpay_payment_id' });
         if (error) {
             console.error('recordPayment failed:', error.message);
@@ -482,7 +522,7 @@ module.exports = {
     },
 
     getRevenue: async (sinceIso = null) => {
-        let q = supabaseAdmin.from('payments').select('amount, currency, kind, created_at').eq('status', 'captured');
+        let q = getAdmin().from('payments').select('amount, currency, kind, created_at').in('status', ['captured', 'fulfilled']);
         if (sinceIso) q = q.gte('created_at', sinceIso);
         const { data } = await q;
         return data || [];

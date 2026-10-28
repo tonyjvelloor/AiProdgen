@@ -91,7 +91,7 @@ async function handler(req, res) {
       return res.status(200).send('Skipped: No payment entity');
     }
 
-    const { getPlanConfig, planForOrder, isLifetimeOfferOrder } = require('../../lib/plans');
+    const { getPlanConfig, planForOrder, isLifetimeOfferOrder, shouldUpgradePlan } = require('../../lib/plans');
     const notes = payment.notes || {};
     let userId = notes.user_id || notes.userId;
     let email = notes.email || payment.email;
@@ -124,11 +124,11 @@ async function handler(req, res) {
     if (isSupabaseConfigured) {
       const { data: existingPayment } = await supabaseAdmin
         .from('payments')
-        .select('razorpay_payment_id, user_id, plan_id, status')
+        .select('razorpay_payment_id, user_id, plan_id, status, fulfillment_status')
         .eq('razorpay_payment_id', payment.id)
         .maybeSingle();
 
-      if (existingPayment && (existingPayment.status === 'fulfilled' || !existingPayment.status)) {
+      if (existingPayment && (existingPayment.fulfillment_status === 'fulfilled' || existingPayment.status === 'fulfilled')) {
         console.log(`[webhook] payment ${payment.id} already fulfilled in ledger`);
         return res.status(200).send('Already processed');
       }
@@ -184,13 +184,22 @@ async function handler(req, res) {
       // 1. Fulfill Plan Subscriptions / Lifetime Deals (Browser closed after checkout)
       if (planId) {
         const planConfig = getPlanConfig(planId);
-        await db.setUserPlan(userId, planId, 'lifetime');
+        const currentPlan = (await db.getUserPlan(userId))?.plan;
+        const willUpgrade = shouldUpgradePlan(currentPlan, planId);
+
+        if (willUpgrade) {
+          await db.setUserPlan(userId, planId, 'lifetime');
+          // REQUIRED FEATURE GRANTS: Do not swallow errors. A failure here must bubble
+          // to catch (grantErr) so HTTP 500 is returned, leaving fulfillment retryable.
+          await entitlements.seedPlanEntitlements(userId, planId, planConfig);
+        } else {
+          console.log(`[webhook] User ${userId} is currently on ${currentPlan}; skipping plan downgrade to ${planId}`);
+        }
+
         await db.initUserCredits(userId);
         if (planConfig.upscale > 0) {
           await db.addCredits(userId, planConfig.upscale, 'purchase', payment.id);
         }
-        await entitlements.seedPlanEntitlements(userId, planId, planConfig)
-          .catch(e => console.error('[webhook] seed entitlements error:', e.message));
 
         if (payment.order_id) {
           await db.deletePendingOrder(payment.order_id).catch(() => {});
@@ -229,18 +238,21 @@ async function handler(req, res) {
             payment.id,
             payment.order_id
           );
+          console.log(`[webhook] Successfully granted ${creditsToGrant} credits to user ${userId}`);
         }
       }
 
       // 3. Fulfill standalone feature unlocks if applicable
-      if (featureOrProduct) {
+      if (featureOrProduct && !planId) {
+        // REQUIRED FEATURE GRANTS: Do not swallow errors.
         await entitlements.grantEntitlement({
           userId,
           feature: featureOrProduct,
           quantity,
           source: entitlements.SOURCES.PURCHASE,
           referenceId: payment.id
-        }).catch(e => console.error('[webhook] grant feature error:', e.message));
+        });
+        console.log(`[webhook] Successfully granted entitlement ${featureOrProduct} to user ${userId}`);
       }
 
       // 4. Record the financial payment record in ledger upon successful fulfillment
@@ -254,40 +266,9 @@ async function handler(req, res) {
         credits: creditsToGrant,
         amount: payment.amount,
         currency: payment.currency || 'INR',
-        status: 'fulfilled'
+        status: 'fulfilled',
+        fulfillmentStatus: 'fulfilled'
       });
-
-      // 3. Fulfill Credit Pack Grants if applicable
-      if (creditsToGrant && creditsToGrant > 0) {
-        const { data: existingTx } = await supabaseAdmin.from('credit_transactions')
-          .select('id')
-          .eq('reference_id', payment.id)
-          .eq('type', 'credit')
-          .maybeSingle();
-
-        if (!existingTx) {
-          await db.recordCreditPurchase(
-            userId,
-            creditsToGrant,
-            payment.amount / 100,
-            payment.id,
-            payment.order_id
-          );
-          console.log(`[webhook] Successfully granted ${creditsToGrant} credits to user ${userId}`);
-        }
-      }
-
-      // 4. Fulfill Entitlement / Feature Grants if applicable
-      if (featureOrProduct && !planId) {
-        await entitlements.grantEntitlement({
-          userId: userId,
-          feature: featureOrProduct,
-          source: 'purchase',
-          referenceId: payment.id,
-          quantity: quantity
-        });
-        console.log(`[webhook] Successfully granted entitlement ${featureOrProduct} to user ${userId}`);
-      }
 
       // 5. Mark webhook processed in audit ledger
       if (isSupabaseConfigured) {

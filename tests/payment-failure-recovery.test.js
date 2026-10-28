@@ -269,4 +269,157 @@ describe('Payment Failure Recovery & Webhook Reconciliation', () => {
         assert.equal(res.statusCode, 200);
         assert.equal(activatedPlan, 'agency_ltd', '$197 acquisition payment must activate agency_ltd');
     });
+
+    test('6. fulfillment status persistence and plan ranking prevent late events from downgrading accounts', async () => {
+        const user = { id: 'user_upgrade_6', email: 'upgrade@example.com' };
+        let activePlan = 'agency_ltd';
+        let setUserPlanCalls = 0;
+
+        mock.method(db, 'getUserByEmail', async () => user);
+        mock.method(db, 'getUserPlan', async () => ({ plan: activePlan }));
+        mock.method(db, 'setUserPlan', async (uid, plan) => {
+            setUserPlanCalls++;
+            activePlan = plan;
+        });
+        mock.method(db, 'initUserCredits', async () => 10);
+        mock.method(db, 'addCredits', async () => 50);
+        mock.method(db, 'recordPayment', async () => true);
+        mock.method(entitlements, 'seedPlanEntitlements', async () => {});
+        mock.method(referrals, 'recordEligiblePayment', async () => {});
+
+        // Delayed webhook arrives for an older Pro ($97) order while user is already on Agency ($197)
+        const event = {
+            id: 'evt_delayed_pro_6',
+            event: 'payment.captured',
+            payload: {
+                payment: {
+                    entity: {
+                        id: 'pay_delayed_pro_6',
+                        order_id: 'order_delayed_pro_6',
+                        amount: 9700,
+                        currency: 'USD',
+                        notes: { userId: user.id, email: user.email, plan: 'pro_founder_ltd' }
+                    }
+                }
+            }
+        };
+
+        const res = mockResponse();
+        await webhook(signedWebhook(event), res);
+        assert.equal(res.statusCode, 200);
+        // Plan must NOT downgrade from agency_ltd to pro_founder_ltd
+        assert.equal(activePlan, 'agency_ltd', 'User plan must remain agency_ltd and not downgrade');
+        assert.equal(setUserPlanCalls, 0, 'setUserPlan must not be called when delayed event is for lower tier');
+    });
+
+    test('7. required feature grant failure returns 500, preserves unfulfilled state, and resumes on retry', async () => {
+        const user = { id: 'user_feat_fail_7', email: 'feat_fail@example.com' };
+        let entitlementAttempts = 0;
+        let paymentRecorded = false;
+
+        mock.method(db, 'getUserByEmail', async () => user);
+        mock.method(db, 'getPendingOrder', async () => null);
+        mock.method(db, 'getUserPlan', async () => ({ plan: 'free_explorer' }));
+        mock.method(db, 'setUserPlan', async () => {});
+        mock.method(db, 'initUserCredits', async () => 10);
+        mock.method(db, 'addCredits', async () => 50);
+        mock.method(db, 'recordPayment', async () => { paymentRecorded = true; return true; });
+        mock.method(entitlements, 'seedPlanEntitlements', async () => {
+            entitlementAttempts++;
+            if (entitlementAttempts === 1) {
+                throw new Error('Injected failure during required plan entitlement grant');
+            }
+            return ['commercial_license', 'watermark_removal'];
+        });
+
+        const event = {
+            id: 'evt_feat_7',
+            event: 'payment.captured',
+            payload: {
+                payment: {
+                    entity: {
+                        id: 'pay_feat_7',
+                        order_id: 'order_feat_7',
+                        amount: 9700,
+                        currency: 'USD',
+                        notes: { userId: user.id, email: user.email, plan: 'pro_founder_ltd' }
+                    }
+                }
+            }
+        };
+
+        // Attempt 1: required entitlement fails -> returns 500, payment NOT recorded as fulfilled
+        const res1 = mockResponse();
+        await webhook(signedWebhook(event), res1);
+        assert.equal(res1.statusCode, 500);
+        assert.equal(paymentRecorded, false, 'Payment must NOT be recorded as fulfilled when required grant fails');
+
+        // Attempt 2 (retry): entitlement succeeds -> returns 200, payment recorded
+        const res2 = mockResponse();
+        await webhook(signedWebhook(event), res2);
+        assert.equal(res2.statusCode, 200);
+        assert.equal(entitlementAttempts, 2, 'Retry must re-attempt the required entitlement grant');
+        assert.equal(paymentRecorded, true, 'Payment must be recorded once all required grants complete');
+    });
+
+    test('8. concurrent initUserCredits calls coalesce and grant exactly one 10-credit signup bonus', async () => {
+        const testUserId = 'user_concurrent_bonus_' + Date.now();
+        let addCreditsCalls = 0;
+        let creditsBalance = 0;
+
+        mock.method(db, 'getUserCredits', async () => creditsBalance);
+        mock.method(db, 'addCredits', async (uid, amount, source, refId) => {
+            addCreditsCalls++;
+            // Simulate slight async latency during database insert
+            await new Promise(r => setTimeout(r, 10));
+            creditsBalance += amount;
+            return creditsBalance;
+        });
+
+        // Trigger two concurrent bonus initializations for the same user
+        const results = await Promise.all([
+            db.initUserCredits(testUserId),
+            db.initUserCredits(testUserId)
+        ]);
+
+        assert.equal(addCreditsCalls, 1, 'addCredits must be called exactly once despite concurrent initialization');
+        assert.equal(results[0], 10, 'First caller receives 10 credits');
+        assert.equal(results[1], 10, 'Second caller receives 10 credits');
+        assert.equal(creditsBalance, 10, 'Final credit balance must be exactly 10 (not 20)');
+    });
+
+    test('9. recordPayment preserves financial captured status and separate fulfilled fulfillment_status', async () => {
+        let upsertedRow = null;
+        const fakeSupabase = {
+            from: (tbl) => ({
+                upsert: async (row) => {
+                    upsertedRow = row;
+                    return { data: row, error: null };
+                }
+            })
+        };
+
+        const sb = require('../lib/supabase');
+        const origAdmin = sb.supabaseAdmin;
+        sb.supabaseAdmin = fakeSupabase;
+        try {
+            await db.recordPayment({
+                paymentId: 'pay_contract_test',
+                orderId: 'order_contract_test',
+                userId: 'user_contract_test',
+                email: 'contract@example.com',
+                kind: 'plan',
+                planId: 'pro_founder_ltd',
+                amount: 9700,
+                currency: 'USD',
+                status: 'fulfilled'
+            });
+
+            assert.notEqual(upsertedRow, null);
+            assert.equal(upsertedRow.status, 'captured', 'Financial status must be captured for revenue calculation');
+            assert.equal(upsertedRow.fulfillment_status, 'fulfilled', 'Fulfillment state must be preserved as fulfilled');
+        } finally {
+            sb.supabaseAdmin = origAdmin;
+        }
+    });
 });
