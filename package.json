@@ -5,8 +5,9 @@
     "main": "server.js",
     "scripts": {
         "start": "node server.js",
-        "test": "node --test \"tests/**/*.test.js\"",
-        "check": "node scripts/check_deploy.js"
+        "test": "node --require ./tests/helpers/isolate.js --test \"tests/**/*.test.js\"",
+        "check": "node scripts/check_deploy.js",
+        "test:integration": "RUN_INTEGRATION_TESTS=true node --require ./tests/helpers/isolate.js --test \"tests/**/*.test.js\""
     },
     "dependencies": {
         "@google/genai": "^1.42.0",
@@ -14,7 +15,7 @@
         "@supabase/supabase-js": "^2.112.0",
         "@upstash/ratelimit": "^2.0.8",
         "@upstash/redis": "^1.38.2",
-        "@vercel/functions": "^3.7.6",
+        "@vercel/functions": "3.6.1",
         "bcryptjs": "^3.0.3",
         "compression": "^1.8.1",
         "cookie-parser": "^1.4.7",

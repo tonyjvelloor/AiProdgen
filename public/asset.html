@@ -6,7 +6,7 @@
     <title>AIProdGen - Asset Details</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
     <link rel="stylesheet" href="/styles.css">
     <script>
         tailwind.config = {
@@ -238,15 +238,15 @@
             
             const params = new URLSearchParams(window.location.search);
             const generatedUrl = params.get('url');
-            const originalUrl = params.get('original') || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80'; // Mock original
+            const originalUrl = params.get('original') || generatedUrl;
 
             if (generatedUrl) {
                 document.getElementById('imgAfter').src = generatedUrl;
                 document.getElementById('downloadBtn').href = generatedUrl;
             } else {
-                // Mock generated image
-                document.getElementById('imgAfter').src = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&q=80'; 
-                document.getElementById('downloadBtn').href = '#';
+                document.getElementById('downloadBtn').removeAttribute('href');
+                document.getElementById('downloadBtn').textContent = 'Choose an asset from your library';
+                return;
             }
             
             document.getElementById('imgBefore').src = originalUrl;

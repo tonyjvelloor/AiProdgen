@@ -1,3 +1,4 @@
+const { invalidateUserProviderKey } = require('../../lib/userKeys');
 // api/keys/add.js
 const { supabaseAdmin } = require('../../lib/supabase');
 const { requireAuth } = require('../../lib/auth');
@@ -10,8 +11,8 @@ module.exports = async function handler(req, res) {
   const user = requireAuth(req, res);
   if (!user) return;
 
-  const { provider, apiKey } = req.body;
-  if (!provider || !apiKey) {
+  const { provider, apiKey } = req.body || {};
+  if (!['gemini', 'replicate'].includes(provider) || typeof apiKey !== 'string' || !apiKey.trim()) {
     return res.status(400).json({ error: 'provider and apiKey are required' });
   }
 
@@ -31,6 +32,8 @@ module.exports = async function handler(req, res) {
     );
 
   if (error) return res.status(500).json({ error: 'Could not save key' });
+
+  invalidateUserProviderKey(user.id, provider);
 
   // Only ever return a masked version — never the raw key
   res.status(200).json({ provider, masked: `${apiKey.slice(0, 3)}...${apiKey.slice(-4)}` });

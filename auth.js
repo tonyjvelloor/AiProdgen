@@ -14,7 +14,7 @@ module.exports = {
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
         let password = '';
         for (let i = 0; i < 12; i++) {
-            password += chars.charAt(Math.floor(Math.random() * chars.length));
+            password += chars.charAt(crypto.randomInt(chars.length));
         }
         return password;
     },
@@ -56,7 +56,7 @@ module.exports = {
     },
 
     // Register FREE user (Freemium)
-    registerFreeUser: async (email, password) => {
+    registerFreeUser: async (email, password, { sendVerification = true } = {}) => {
         // Check if email already exists
         if (await db.emailExists(email)) {
             throw new Error('Email already registered');
@@ -66,7 +66,7 @@ module.exports = {
 
         // Create user with null payment ID and 0 amount
         const user = await db.createUser(email, passwordHash, null, null, 0, 'USD');
-        await module.exports.sendVerificationFlow(user, email);
+        if (sendVerification) await module.exports.sendVerificationFlow(user, email);
 
         return { email };
     },
@@ -91,20 +91,21 @@ module.exports = {
 
         // Generate JWT token
         const token = jwt.sign(
-            { 
-                userId: user.id, 
+            {
+                userId: user.id,
                 email: user.email,
-                verified: user.email_verified_at !== null 
+                verified: !!user.email_verified_at
             },
             getJwtSecret(),
             { expiresIn: '7d' }
         );
 
-        return { token, email: user.email, verified: user.email_verified_at !== null };
+        return { token, email: user.email, verified: !!user.email_verified_at };
     },
 
     // Change password
     changePassword: async (email, oldPassword, newPassword) => {
+        if (typeof newPassword !== 'string' || newPassword.length < 8) throw new Error('Password must be at least 8 characters');
         const user = await db.getUserByEmail(email);
 
         if (!user) {
@@ -147,13 +148,13 @@ module.exports = {
         }
 
         req.user = decoded;
-        
+
         try {
             Sentry.setUser({ id: decoded.userId, email: decoded.email });
         } catch (e) {
             // Ignore if Sentry is not initialized
         }
-        
+
         next();
     }
 };

@@ -90,7 +90,7 @@ describe('product ownership in generate API endpoint', () => {
         const req = {
             method: 'POST',
             headers: {},
-            body: { productId: 'any-product-id' }
+            body: { productId: 'any-product-id', provider: 'gemini', prompt: 'test' }
         };
         const res = mockRes();
         await generateHandler(req, res);
@@ -111,7 +111,10 @@ describe('product ownership in generate API endpoint', () => {
             }
         };
         const res = mockRes();
-        await generateHandler(req, res);
+        const original = ProductService.getProductById;
+        ProductService.getProductById = async () => null;
+        try { await generateHandler(req, res); }
+        finally { ProductService.getProductById = original; }
         assert.strictEqual(res.statusCode, 404);
         assert.ok(res.body.error.includes('Product not found'));
     });

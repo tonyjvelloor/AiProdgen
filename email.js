@@ -22,7 +22,7 @@ module.exports = {
     sendCredentialsEmail: async (email, password) => {
         if (!process.env.SMTP_USER) {
             console.log('SMTP not configured - skipping email');
-            console.log(`Credentials for ${email}: Password: ${password}`);
+
             return false;
         }
 

@@ -5,16 +5,20 @@ try {
     const { supabaseAdmin } = require('../lib/supabase');
     const ProductService = require('../lib/product_service');
     const WorkspaceService = require('../lib/workspace_service');
-    const keyVault = require('../lib/keyVault');
+    const { getUserProviderKey } = require('../lib/userKeys');
+    const { reserveAllowance } = require('../lib/generation_billing');
+    const { requireGenerateRateLimit } = require('../lib/ratelimit');
     const db = require('../database');
 
-    module.exports = async function handler(req, res) {
+    async function handler(req, res) {
         if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
         const user = requireAuth(req, res);
         if (!user) return; // response already sent
 
-        const { productId, provider, model, prompt, imageBase64 } = req.body;
+        const { productId, provider, model, prompt, imageBase64 } = req.body || {};
+        if (provider !== 'gemini') return res.status(400).json({ error: 'Choose the Gemini image editor.' });
+        if (!productId || typeof prompt !== 'string' || !prompt.trim()) return res.status(400).json({ error: 'productId and prompt are required.' });
 
         // Strict product ownership verification:
         // Protects against unauthorized association, generation, or repointing of other users' products
@@ -39,42 +43,23 @@ try {
             }
         }
 
-        // 1. Check outputs pool
-        const creditsAvailable = await db.getUserCredits(user.id);
-        if (creditsAvailable < 1) {
-            return res.status(402).json({ error: 'Insufficient outputs. Please top up.' });
-        }
-
-        // 2. Fetch User's Key (or fallback)
-        const { data: keyData } = await supabaseAdmin.from('user_api_keys')
-            .select('encrypted_key')
-            .eq('user_id', user.id)
-            .eq('provider', provider)
-            .single();
-
-        let apiKey = null;
-        if (keyData) {
-            apiKey = keyVault.decryptKey(keyData.encrypted_key);
-        } else {
-            // Fallback to system key if allowed for this user/tier (simplified for MVP)
-            apiKey = process.env.GEMINI_API_KEY;
-        }
-
-        if (!apiKey) {
-            return res.status(400).json({ error: 'API key not configured for this provider.' });
-        }
-
-        const isValid = await validateProviderKey(provider, apiKey);
-        if (!isValid) return res.status(400).json({ error: 'Invalid API key.' });
-
+        if (typeof imageBase64 !== 'string' || !imageBase64.startsWith('data:image/')) return res.status(400).json({ error: 'A product reference image is required.' });
+        const account = await db.getUserById(user.id);
+        if (!account?.is_active || !account.email_verified_at) return res.status(403).json({ error: 'An active, verified account is required.' });
+        let allowed = false;
+        req.user = { userId: user.id };
+        await requireGenerateRateLimit(req, res, () => { allowed = true; });
+        if (!allowed) return;
+        const apiKey = await getUserProviderKey(user.id, 'gemini');
+        if (!apiKey) return res.status(402).json({ error: 'Add your Gemini API key in Settings.', code: 'BYOK_REQUIRED' });
         // 3. Create run record
         const runId = await db.createAIRun(user.id, productId, null, prompt, 1, 1);
-        const reserved = await db.reserveCredits(user.id, 1, runId);
-        if (!reserved) {
+        let allowance;
+        try { allowance = await reserveAllowance(user.id, 1); }
+        catch (error) {
             await db.updateAIRun(runId, { status: 'failed' });
-            return res.status(402).json({ error: 'Insufficient credits available. Please top up.' });
+            return res.status(429).json({ error: error.message });
         }
-
         // 4. Fire Async Generation Task using @vercel/functions waitUntil
         waitUntil((async () => {
             try {
@@ -149,12 +134,11 @@ try {
                 }
 
                 // Finalize success ONLY after the asset is durably stored and recorded in database:
-                await db.updateAIRun(runId, { status: 'completed' });
-                await db.commitCredits(user.id, 1, runId);
+                await db.updateAIRun(runId, { status: 'completed', funded_by: 'byok', provider_cost: 0, outputs_used: 1 });
             } catch (err) {
                 console.error("Async Generation Failed:", err);
                 await db.updateAIRun(runId, { status: 'failed' });
-                await db.rollbackCredits(user.id, 1, runId);
+                await db.releaseGenerationQuota(user.id, allowance);
             }
         })());
 
@@ -163,6 +147,14 @@ try {
             runId: runId
         });
     };
+    module.exports = async (req, res) => {
+        try { return await handler(req, res); }
+        catch (error) {
+            console.error('[generate] Request failed:', error.message);
+            return res.status(500).json({ error: 'Could not start generation. Please retry.' });
+        }
+    };
+
 } catch (e) {
     module.exports = (req, res) => res.status(500).json({ error: "Initialization failed"});
 }

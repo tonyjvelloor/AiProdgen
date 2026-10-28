@@ -1730,10 +1730,7 @@
                         </svg>
                         <div>
                             <p class="text-sm font-medium text-amber-800">Security Notice</p>
-                            <p class="text-xs text-amber-700 mt-1">Your API key is stored locally in your browser
-                                and
-                                sent securely to our server for API calls. It is never logged or stored on our
-                                servers.
+                            <p class="text-xs text-amber-700 mt-1">Your API key is encrypted in your account and used by our server to call the provider on your behalf. The browser stores only a saved-key marker and masked hint.
                             </p>
                         </div>
                     </div>
@@ -2911,8 +2908,11 @@
             }
         }
 
-        function clearAllData() {
+        async function clearAllData() {
             if (confirm('This will clear your saved API key and all settings. Continue?')) {
+                const token = localStorage.getItem('token');
+                const response = await fetch('/api/keys/remove', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ provider: 'gemini' }) }).catch(() => null);
+                if (!response?.ok) { showApiKeyMessage('Could not remove the saved key. Please retry.', 'error'); return; }
                 localStorage.clear();
                 userApiKey = '';
                 document.getElementById('apiKeyInput').value = '';

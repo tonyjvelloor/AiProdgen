@@ -42,6 +42,8 @@ const { getUserProviderKey } = require('./lib/userKeys');
 const entitlements = require('./lib/entitlements');
 const referrals = require('./lib/referrals');
 const jwt = require('jsonwebtoken');
+const { requireOwnedProduct, validateProductOutput } = require('./lib/product_access');
+const { decodeImage } = require('./lib/image_input');
 
 // ... (existing code)
 
@@ -79,21 +81,22 @@ app.use(helmet({
             // it in the allowlist, the CSP silently blocked it sitewide --
             // payments still succeeded, but Razorpay's fraud-signal
             // collection never ran.
-            scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com", "https://cdnjs.cloudflare.com", "https://checkout.razorpay.com", "https://cdn.razorpay.com", "https://connect.facebook.net", "https://cdn.jsdelivr.net"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com", "https://cdnjs.cloudflare.com", "https://checkout.razorpay.com", "https://cdn.razorpay.com", "https://connect.facebook.net", "https://cdn.jsdelivr.net", "https://accounts.google.com"],
             scriptSrcAttr: ["'unsafe-inline'"],
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdn.jsdelivr.net"],
             fontSrc: ["'self'", "https://fonts.gstatic.com"],
             // grainy-gradients.vercel.app: decorative noise texture behind
             // the Director Mode demo card on index.html -- was silently
             // blocked, rendering the card without its background texture.
-            imgSrc: ["'self'", "data:", "blob:", "https://www.facebook.com", "https://grainy-gradients.vercel.app"],
+            imgSrc: ["'self'", "data:", "blob:", "https://www.facebook.com", "https://grainy-gradients.vercel.app", "https://*.supabase.co", "https://*.replicate.delivery"],
             // ipapi.co: index.html's currency auto-detection fetches this on
             // load to pick INR vs USD by visitor country. Blocked by CSP, it
             // silently fell into the timezone-based fallback every time --
             // same UX for most visitors, but wrong for e.g. an Indian
             // visitor on a non-IST-configured device or a VPN.
-            connectSrc: ["'self'", "https://api.razorpay.com", "https://www.facebook.com", "https://ipapi.co"],
-            frameSrc: ["https://api.razorpay.com", "https://www.facebook.com", "https://www.youtube.com", "https://youtube.com"],
+            connectSrc: ["'self'", "https://api.razorpay.com", "https://www.facebook.com", "https://ipapi.co", "https://accounts.google.com", "https://*.supabase.co"],
+            mediaSrc: ["'self'", "blob:", "https://*.replicate.delivery", "https://*.supabase.co"],
+            frameSrc: ["https://api.razorpay.com", "https://www.facebook.com", "https://www.youtube.com", "https://youtube.com", "https://accounts.google.com"],
         },
     },
 }));
@@ -158,11 +161,15 @@ app.get('/api/health', (req, res) => {
 // ==========================================
 // COMPOSABLE MIDDLEWARES
 // ==========================================
-const requireVerifiedUser = (req, res, next) => {
-    if (!req.user.verified) {
-        return res.status(403).json({ error: 'Email verification required to perform this action.' });
+const requireVerifiedUser = async (req, res, next) => {
+    try {
+        const user = await db.getUserById(req.user.userId);
+        if (!user || !user.is_active) return res.status(403).json({ error: 'Account unavailable.' });
+        if (!user.email_verified_at) return res.status(403).json({ error: 'Email verification required to perform this action.' });
+        next();
+    } catch (error) {
+        res.status(503).json({ error: 'Could not verify account status. Please retry.' });
     }
-    next();
 };
 
 const requireCredits = async (req, res, next) => {
@@ -203,10 +210,20 @@ app.use((req, res, next) => {
 });
 const xssMiddleware = require('./lib/xssMiddleware');
 app.use(xssMiddleware);
-app.use(express.static('public'));
+app.use(express.static(require('path').join(__dirname, 'public')));
 
 // ==========================================
 // AUTH ENDPOINTS
+// Use the same handlers on local/VPS and native Vercel routes.
+const nativeRoute = handler => (req, res, next) => Promise.resolve(handler(req, res)).catch(next);
+app.post('/api/keys/add', nativeRoute(require('./api/keys/add')));
+app.post('/api/keys/remove', nativeRoute(require('./api/keys/remove')));
+app.post('/api/generate', nativeRoute(require('./api/generate')));
+app.get('/api/generations/:id', (req, res, next) => {
+    req.query.id = req.params.id;
+    return nativeRoute(require('./api/generations/[id]'))(req, res, next);
+});
+
 // ==========================================
 app.get('/api/auth/verify-email', async (req, res) => {
     try {
@@ -414,15 +431,15 @@ app.post('/api/products', auth.requireAuth, async (req, res) => {
             return res.status(400).json({ error: 'Name and image are required.' });
         }
 
+        const decoded = decodeImage(base64Image);
         const workspace = await WorkspaceService.getOrCreateWorkspace(req.user.userId);
 
         // 1. Create Product (Primary Output ID null for now)
-        const product = await ProductService.createProduct(workspace.id, { name, category });
+        const product = await ProductService.createProduct(workspace.id, { ...req.body, name, category });
 
         // 2. Upload Image to Supabase
-        const buffer = Buffer.from(base64Image.replace(/^data:image\/\w+;base64,/, ""), 'base64');
-        const filename = `${req.user.userId}/${product.id}_initial.jpg`;
-        const { error: storageError } = await supabaseAdmin.storage.from('product-images').upload(filename, buffer, { contentType: 'image/jpeg', upsert: true });
+        const filename = `${req.user.userId}/${product.id}_initial.${decoded.extension}`;
+        const { error: storageError } = await supabaseAdmin.storage.from('product-images').upload(filename, decoded.buffer, { contentType: decoded.mimeType, upsert: true });
         
         if (storageError) throw new Error(`Storage upload failed: ${storageError.message}`);
         const { data: publicUrlData } = supabaseAdmin.storage.from('product-images').getPublicUrl(filename);
@@ -444,7 +461,7 @@ app.post('/api/products', auth.requireAuth, async (req, res) => {
         res.json(updatedProduct);
     } catch (error) {
         console.error('Error creating product:', error);
-        res.status(500).json({ error: error.message });
+        res.status(error.status || 500).json({ error: error.status ? error.message : 'Could not create product. Please retry.' });
     }
 });
 
@@ -477,17 +494,19 @@ app.put('/api/products/:id', auth.requireAuth, async (req, res) => {
             return res.status(400).json({ error: 'Cannot reassign product to another workspace' });
         }
         
+        if (req.body.primary_output_id !== undefined) await validateProductOutput(product.id, req.body.primary_output_id);
         const updatedProduct = await ProductService.updateProduct(req.params.id, req.body);
         res.json(updatedProduct);
     } catch (error) {
         const isClientError = error.message.includes('Cannot modify protected fields') ||
                               error.message.includes('Invalid product status') ||
                               error.message.includes('No valid update fields');
-        res.status(isClientError ? 400 : 500).json({ error: error.message });
+        res.status(error.status || (isClientError ? 400 : 500)).json({ error: error.message });
     }
 });
 
 app.post('/api/generate-image', auth.requireAuth, requireVerifiedUser, requireGenerateRateLimit, async (req, res) => {
+    let allowance = null;
     try {
         const { prompt, images, mode, modelEthnicity, modelGender } = req.body;
         const userId = req.user.userId;
@@ -531,6 +550,8 @@ app.post('/api/generate-image', auth.requireAuth, requireVerifiedUser, requireGe
             }
         }
 
+        allowance = await db.reserveGenerationQuota(userId, 1, planConfig.byok_gen_limit);
+        if (!allowance) return res.status(429).json({ error: 'Monthly image allowance reached.' });
         let base64Image = null;
 
         // Build prompt parts
@@ -595,11 +616,10 @@ app.post('/api/generate-image', auth.requireAuth, requireVerifiedUser, requireGe
         }
 
         // Log successful generation and track usage
-        if (userId && userId > 0) {
+        if (userId) {
             await db.logGeneration(userId, 'google', GEMINI_IMAGE_MODEL, 0, 0, 0.005, 1, 0, 'success', null, null, null, null);
             // Increment monthly gen count for paid plans
-            if (planConfig.type === 'server' && userPlan.plan !== 'lifetime_founder') {
-                await db.incrementGenCount(userId);
+            if (userPlan.plan !== 'lifetime_founder') {
                 await UsageRecorder.record({
                     userId, job: 'generate_image', model: 'gemini-image',
                     fundedBy: userKey ? 'byok' : 'platform'
@@ -614,6 +634,7 @@ app.post('/api/generate-image', auth.requireAuth, requireVerifiedUser, requireGe
         res.json({ image: base64Image });
 
     } catch (error) {
+        if (allowance) await db.releaseGenerationQuota(req.user.userId, allowance).catch(e => console.error('[quota] Restore failed:', e.message));
         if (error.message.includes("Rate limit")) {
             console.warn("⚠️  API Rate Limit hit (Handling via client retry):", error.message);
             res.status(500).json({ error: error.message });
@@ -649,6 +670,8 @@ app.post('/api/validate-key', async (req, res) => {
 
 // ============ Upscale Credits API ============
 
+// ============ Upscale Credits API ============
+
 // Credit packages (amount in paise)
 const CREDIT_PACKAGES = {
     starter: { credits: 50, amount_inr: 39900, amount_usd: 500, name: 'Starter Monthly' },
@@ -661,8 +684,8 @@ const CREDIT_PACKAGES = {
 // gen_limit = server-key gens/mo, byok_gen_limit = own-key gens/mo
 const PLANS = {
     free_explorer: { gen_limit: 0, byok_gen_limit: 20, upscale: 0, ugc: 0, director: false, veo: false, requires_byok: true, watermark: true, templates: 'none', bulk: false, commercial: false },
-    hobbyist_ltd: { gen_limit: 0, byok_gen_limit: 500, upscale: 0, ugc: 0, director: false, veo: false, requires_byok: true, watermark: false, templates: 'basic', bulk: false, commercial: false },
-    pro_founder_ltd: { gen_limit: 0, byok_gen_limit: 3000, upscale: 50, ugc: 10, director: true, veo: true, requires_byok: true, watermark: false, templates: 'advanced', bulk: false, commercial: false },
+    hobbyist_ltd: { gen_limit: 0, byok_gen_limit: 500, upscale: 0, ugc: 0, director: false, veo: false, requires_byok: true, watermark: false, templates: 'basic', bulk: false, commercial: true },
+    pro_founder_ltd: { gen_limit: 0, byok_gen_limit: 3000, upscale: 50, ugc: 10, director: true, veo: true, requires_byok: true, watermark: false, templates: 'advanced', bulk: false, commercial: true },
     // Infinity here meant the `monthly_gen_count >= byok_gen_limit` guards never
     // fired, so runaway use had no signal. A high finite ceiling behaves the
     // same for real customers and still trips on abuse.
@@ -689,6 +712,50 @@ const PLAN_PRICES = {
     pro_founder_ltd: { onetime_usd: 9700 },  // $97
     agency_ltd: { onetime_usd: 19700 }   // $197
 };
+
+// Prices the lifetime-deal checkout is allowed to charge, per currency.
+//
+// /api/payment/create-order took `amount` straight from the request body and
+// passed it to Razorpay, and /api/payment/verify only checked the signature --
+// which is valid for whatever amount was ordered. Anyone could POST
+// {email, amount: 1} and receive a full lifetime account for one dollar.
+//
+// landing.html and index.html advertised different prices ($47 vs $49) for
+// the same offer; both now show $47, so $49 was removed rather than kept as a
+// second valid amount indefinitely.
+const LIFETIME_OFFER_PRICES = {
+    USD: [47],
+    INR: [3999]
+};
+
+// What an order bought is recorded server-side when the order is created
+// (pending_orders) and read back from there at verify -- never from the
+// request body. The Razorpay signature only proves *an* order was paid, so a
+// body-supplied planId/packageId let a $5 credit payment activate a $197
+// plan, and replaying one payment re-granted credits indefinitely. Every
+// price below is distinct, so a stored (amount, currency) names exactly one
+// product; tests/payment-integrity.test.js guards that invariant.
+function planForOrder(order) {
+    if (!order) return null;
+    if (order.currency === 'INR' && Number(order.amount) === 399900) return 'hobbyist_ltd';
+    if (order.currency !== 'USD') return null;
+    const amount = Number(order.amount);
+    if (amount === 4700) return 'hobbyist_ltd';
+    return Object.keys(PLAN_PRICES).find(id => PLAN_PRICES[id].onetime_usd === amount) || null;
+}
+
+function creditPackageForOrder(order) {
+    const field = order && ({ USD: 'amount_usd', INR: 'amount_inr' })[order.currency];
+    if (!field) return null;
+    const amount = Number(order.amount);
+    return Object.keys(CREDIT_PACKAGES).find(id => CREDIT_PACKAGES[id][field] === amount) || null;
+}
+
+function isLifetimeOfferOrder(order) {
+    if (!order) return false;
+    const amount = Number(order.amount);
+    return (LIFETIME_OFFER_PRICES[order.currency] || []).some(p => Math.round(p * 100) === amount);
+}
 
 // Veo is roughly an order of magnitude more expensive per clip than anything
 // else the product generates, and neither Veo route charged credits. Falling
@@ -747,47 +814,6 @@ async function providerFailure(res, error, engine, refund = null) {
         code: 'PROVIDER_ERROR',
         detail: error && error.providerDetail ? String(error.providerDetail).slice(0, 200) : undefined
     });
-}
-
-// Prices the lifetime-deal checkout is allowed to charge, per currency.
-//
-// /api/payment/create-order took `amount` straight from the request body and
-// passed it to Razorpay, and /api/payment/verify only checked the signature --
-// which is valid for whatever amount was ordered. Anyone could POST
-// {email, amount: 1} and receive a full lifetime account for one dollar.
-//
-// landing.html and index.html advertised different prices ($47 vs $49) for
-// the same offer; both now show $47, so $49 was removed rather than kept as a
-// second valid amount indefinitely.
-const LIFETIME_OFFER_PRICES = {
-    USD: [47],
-    INR: [3999]
-};
-
-// What an order bought is recorded server-side when the order is created
-// (pending_orders) and read back from there at verify -- never from the
-// request body. The Razorpay signature only proves *an* order was paid, so a
-// body-supplied planId/packageId let a $5 credit payment activate a $197
-// plan, and replaying one payment re-granted credits indefinitely. Every
-// price below is distinct, so a stored (amount, currency) names exactly one
-// product; tests/payment-integrity.test.js guards that invariant.
-function planForOrder(order) {
-    if (!order || order.currency !== 'USD') return null;
-    const amount = Number(order.amount);
-    return Object.keys(PLAN_PRICES).find(id => PLAN_PRICES[id].onetime_usd === amount) || null;
-}
-
-function creditPackageForOrder(order) {
-    const field = order && ({ USD: 'amount_usd', INR: 'amount_inr' })[order.currency];
-    if (!field) return null;
-    const amount = Number(order.amount);
-    return Object.keys(CREDIT_PACKAGES).find(id => CREDIT_PACKAGES[id][field] === amount) || null;
-}
-
-function isLifetimeOfferOrder(order) {
-    if (!order) return false;
-    const amount = Number(order.amount);
-    return (LIFETIME_OFFER_PRICES[order.currency] || []).some(p => Math.round(p * 100) === amount);
 }
 
 // Backstop for platform-funded work that isn't paid per use with credits:
@@ -1066,7 +1092,8 @@ app.post('/api/plan/subscribe', auth.requireAuth, async (req, res) => {
             return res.status(500).json({ error: 'Razorpay not configured' });
         }
 
-        const { planId: rawPlanId, billingCycle = 'monthly', currency = 'INR' } = req.body;
+        const { planId: rawPlanId, currency = 'USD' } = req.body;
+        const billingCycle = 'lifetime';
 
         // app.html sends the display aliases ('creator', 'pro', 'agency') that
         // getPlanConfig() already resolves through PLAN_ALIASES for gating, but
@@ -1087,8 +1114,8 @@ app.post('/api/plan/subscribe', auth.requireAuth, async (req, res) => {
         // "monthly_inr"), which can never match `onetime_usd`, so this always
         // failed too. Rather than invent an INR conversion that isn't this
         // code's decision to make, charge the real USD price and say so.
-        const useCurrency = 'USD';
-        const amount = prices.onetime_usd;
+        const useCurrency = currency === 'INR' && planId === 'hobbyist_ltd' ? 'INR' : 'USD';
+        const amount = useCurrency === 'INR' ? 399900 : prices.onetime_usd;
 
         if (!amount) {
             return res.status(400).json({ error: 'This plan has no price configured.' });
@@ -1102,7 +1129,8 @@ app.post('/api/plan/subscribe', auth.requireAuth, async (req, res) => {
                 type: 'plan_subscription',
                 plan: planId,
                 billing_cycle: billingCycle,
-                email: req.user.email
+                email: req.user.email,
+                userId: req.user.userId || req.user.id
             }
         });
         await db.createPendingOrder(order.id, req.user.email, amount, useCurrency);
@@ -1155,32 +1183,41 @@ app.post('/api/plan/verify', auth.requireAuth, async (req, res) => {
         // Activate plan
         const user = await db.getUserByEmail(req.user.email);
         if (!user) {
+            await db.createPendingOrder(razorpay_order_id, req.user.email, order.amount, order.currency).catch(() => {});
             return res.status(404).json({ error: 'User not found' });
         }
 
-        await db.setUserPlan(user.id, planId, billingCycle);
-
-        // Also initialize upscale credits based on plan
-        const planConfig = getPlanConfig(planId);
-        await db.initUserCredits(user.id);
-        await db.addCredits(user.id, planConfig.upscale);
-
-        // Re-derive feature grants (bulk/commercial/watermark-removal/
-        // templates) from the plan just activated. Additive and idempotent --
-        // does not touch credits or BYOK, only which paid features unlock.
-        await entitlements.seedPlanEntitlements(user.id, planId, planConfig)
-            .catch(e => console.error('[entitlements] seed failed on plan verify:', e.message));
-
         const planPrice = PLAN_PRICES[planId] || {};
-        const planAmountCents = planPrice.onetime_usd || planPrice[`${billingCycle}_inr`] || 0;
-        const planCurrency = planPrice.onetime_usd ? 'USD' : 'INR';
-        await db.recordPayment({
-            paymentId: razorpay_payment_id, orderId: razorpay_order_id,
-            userId: user.id, email: user.email,
-            kind: 'plan', planId,
-            amount: planAmountCents,
-            currency: planCurrency
-        });
+        const planAmountCents = Number(order.amount);
+        const planCurrency = order.currency;
+
+        try {
+            await db.setUserPlan(user.id, planId, billingCycle);
+
+            // Also initialize upscale credits based on plan
+            const planConfig = getPlanConfig(planId);
+            await db.initUserCredits(user.id);
+            await db.addCredits(user.id, planConfig.upscale);
+
+            // Re-derive feature grants (bulk/commercial/watermark-removal/
+            // templates) from the plan just activated. Additive and idempotent --
+            // does not touch credits or BYOK, only which paid features unlock.
+            await entitlements.seedPlanEntitlements(user.id, planId, planConfig)
+                .catch(e => console.error('[entitlements] seed failed on plan verify:', e.message));
+
+            await db.recordPayment({
+                paymentId: razorpay_payment_id, orderId: razorpay_order_id,
+                userId: user.id, email: user.email,
+                kind: 'plan', planId,
+                amount: planAmountCents,
+                currency: planCurrency
+            });
+        } catch (fulfillmentError) {
+            // Partial-failure recovery: re-insert pending order so webhook or retry can reconcile
+            console.error(`[plan/verify] Partial failure for order ${razorpay_order_id}:`, fulfillmentError.message);
+            await db.createPendingOrder(razorpay_order_id, req.user.email, order.amount, order.currency).catch(() => {});
+            throw fulfillmentError;
+        }
 
         // Partner Program (Release D): a no-op unless this user was referred
         // and this plan is commissionable (agency_ltd/hobbyist_ltd today).
@@ -1372,10 +1409,11 @@ app.get('/api/user/stats', auth.requireAuth, async (req, res) => {
 });
 
 // 5. Upscale Image Route - Uses Gemini to enhance image quality
-app.post('/api/upscale-image', requireGenerateRateLimit, async (req, res) => {
+app.post('/api/upscale-image', auth.requireAuth, requireVerifiedUser, requireGenerateRateLimit, async (req, res) => {
     try {
         const { image } = req.body;
-        const apiKey = getApiKey(req);
+        const apiKey = await resolveVeoKey(req);
+        if (!apiKey) return res.status(402).json(VEO_KEY_REQUIRED);
 
         if (!image) {
             throw new Error("No image provided for upscaling");
@@ -1794,39 +1832,6 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
 
-// ==========================================
-// SPRINT 1: EMAIL VERIFICATION
-// ==========================================
-app.get('/api/auth/verify-email', async (req, res) => {
-    try {
-        const { token } = req.query;
-        if (!token) return res.status(400).send('Missing token');
-
-        // Check if token exists and is valid
-        const { supabaseAdmin } = require('./lib/supabase');
-        
-        // Find token
-        const { data: tokenData } = await supabaseAdmin.from('auth_tokens')
-            .select('*')
-            .eq('token_hash', token)
-            .eq('type', 'email_verification')
-            .gt('expires_at', new Date().toISOString())
-            .maybeSingle();
-
-        if (!tokenData) {
-            return res.status(400).send('Invalid or expired token.');
-        }
-
-        // Delete token
-        await supabaseAdmin.from('auth_tokens').delete().eq('id', tokenData.id);
-
-        res.redirect('/dashboard.html?verified=true');
-    } catch (error) {
-        console.error('Email verification error:', error);
-        res.status(500).send('Verification failed.');
-    }
-});
-
 app.post('/api/auth/resend-verification', requireEmailVerifyRateLimit, async (req, res) => {
     try {
         const { email } = req.body;
@@ -1836,13 +1841,13 @@ app.post('/api/auth/resend-verification', requireEmailVerifyRateLimit, async (re
         
         const { supabaseAdmin } = require('./lib/supabase');
         
-        const { data: user } = await supabaseAdmin.from('users').select('id, is_active').eq('email', email).maybeSingle();
+        const { data: user } = await supabaseAdmin.from('users').select('id, is_active, email_verified_at').eq('email', email).maybeSingle();
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
         }
         
         // Check if already active/verified
-        if (user.is_active) {
+        if (user.email_verified_at) {
             return res.status(400).json({ error: 'Email is already verified' });
         }
 
@@ -1854,8 +1859,8 @@ app.post('/api/auth/resend-verification', requireEmailVerifyRateLimit, async (re
             expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
         });
         
-        const verificationLink = `${process.env.APP_URL || 'http://localhost:3000'}/api/auth/verify-email?token=${verificationToken}`;
-        await emailService.sendVerificationEmail(email, verificationLink);
+        const delivered = await emailService.sendVerificationEmail(email, verificationToken);
+        if (!delivered) return res.status(503).json({ error: 'Verification email could not be sent. Please retry.' });
 
         res.json({ success: true, message: 'Verification email sent' });
     } catch (error) {
@@ -1909,20 +1914,6 @@ app.post('/api/auth/signup', requireLoginRateLimit, async (req, res) => {
         const { ip, userAgent, fbp, fbc } = getClientInfo(req);
         fb.trackLead(email, ip, userAgent, fbp, fbc).catch(e => console.error(e));
 
-        // Generate Verification Token
-        const { supabaseAdmin } = require('./lib/supabase');
-        const verificationToken = uuidv4();
-        await supabaseAdmin.from('auth_tokens').insert({
-            user_id: user.id,
-            token_hash: verificationToken,
-            type: 'email_verification',
-            expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
-        });
-
-        // Send Email
-        emailService.sendVerificationEmail(email, verificationToken).catch(e => console.error('Failed to send verification email:', e));
-
-
         res.json({ token, email: user.email });
 
     } catch (error) {
@@ -1931,7 +1922,7 @@ app.post('/api/auth/signup', requireLoginRateLimit, async (req, res) => {
     }
 });
 
-app.post('/api/auth/google', async (req, res) => {
+app.post('/api/auth/google', requireLoginRateLimit, async (req, res) => {
     try {
         if (!googleClient) {
             return res.status(500).json({ error: 'Google login not configured' });
@@ -1949,6 +1940,7 @@ app.post('/api/auth/google', async (req, res) => {
         });
 
         const payload = ticket.getPayload();
+        if (!payload.email_verified || !payload.email) return res.status(401).json({ error: 'Google email is not verified' });
         const email = payload.email;
 
         // Check if user exists
@@ -1958,7 +1950,7 @@ app.post('/api/auth/google', async (req, res) => {
         if (!user) {
             // Generate random password for Google users
             const randomPassword = auth.generatePassword();
-            await auth.registerFreeUser(email, randomPassword);
+            await auth.registerFreeUser(email, randomPassword, { sendVerification: false });
             user = await db.getUserByEmail(email);
 
             // Partner Program: only a genuinely new account can be attributed
@@ -1978,6 +1970,10 @@ app.post('/api/auth/google', async (req, res) => {
             return res.status(403).json({ error: 'Account is deactivated' });
         }
 
+        const { error: verificationError } = await supabaseAdmin.from('users')
+            .update({ email_verified_at: user.email_verified_at || new Date().toISOString() }).eq('id', user.id);
+        if (verificationError) throw verificationError;
+
         // Generate JWT token
         const jwt = require('jsonwebtoken');
         const JWT_SECRET = getJwtSecret();
@@ -1995,7 +1991,7 @@ app.post('/api/auth/google', async (req, res) => {
 });
 
 // Change Password
-app.post('/api/auth/change-password', async (req, res) => {
+app.post('/api/auth/change-password', requireLoginRateLimit, async (req, res) => {
     try {
         const { email, oldPassword, newPassword } = req.body;
 
@@ -2026,7 +2022,7 @@ app.post('/api/payment/create-order', async (req, res) => {
         }
 
         // The client does not get to name its own price.
-        const allowed = LIFETIME_OFFER_PRICES[currency];
+        const allowed = currency === 'USD' ? [...LIFETIME_OFFER_PRICES.USD, 97, 197] : LIFETIME_OFFER_PRICES[currency];
         if (!allowed) {
             return res.status(400).json({ error: `Unsupported currency: ${currency}` });
         }
@@ -2050,7 +2046,11 @@ app.post('/api/payment/create-order', async (req, res) => {
             amount: amountInSmallestUnit,
             currency: currency,
             receipt: `order_${Date.now()}`,
-            notes: { email }
+            notes: {
+                type: 'acquisition_lifetime',
+                plan: 'hobbyist_ltd',
+                email
+            }
         });
 
         // Track InitiateCheckout with value for better attribution
@@ -2097,7 +2097,7 @@ app.post('/api/payment/verify', async (req, res) => {
         // redeemable here.
         const pendingOrder = await db.getPendingOrder(razorpay_order_id);
 
-        if (!isLifetimeOfferOrder(pendingOrder)) {
+        if (!isLifetimeOfferOrder(pendingOrder) && !planForOrder(pendingOrder)) {
             return res.status(400).json({ error: 'Order not found' });
         }
 
@@ -2125,7 +2125,7 @@ app.post('/api/payment/verify', async (req, res) => {
             await referrals.attributeReferral({ referralCode, referredUserId: newUser.id })
                 .catch(e => console.error('[referrals] attribution failed on lifetime purchase:', e.message));
 
-            const purchasedPlanId = 'hobbyist_ltd';
+            const purchasedPlanId = planForOrder(pendingOrder) || 'hobbyist_ltd';
             await db.setUserPlan(newUser.id, purchasedPlanId, 'lifetime');
             const purchasedPlanConfig = getPlanConfig(purchasedPlanId);
             await db.initUserCredits(newUser.id);
@@ -2855,7 +2855,7 @@ app.get('/api/engines/photography/packs', auth.requireAuth, async (req, res) => 
 });
 
 // Start a Photography Shoot
-app.post('/api/products/:id/jobs/photography', auth.requireAuth, async (req, res) => {
+app.post('/api/products/:id/jobs/photography', auth.requireAuth, requireVerifiedUser, requireGenerateRateLimit, requireOwnedProduct, async (req, res) => {
     try {
         const { packId, aspectRatio } = req.body;
         const collection = await PhotographyEngine.startShoot(req.user.userId, req.params.id, packId, aspectRatio);
@@ -2879,9 +2879,11 @@ app.get('/api/engines/commerce/packs', auth.requireAuth, async (req, res) => {
 });
 
 // Start a Commerce Production Run
-app.post('/api/products/:id/jobs/commerce', auth.requireAuth, async (req, res) => {
+app.post('/api/products/:id/jobs/commerce', auth.requireAuth, requireVerifiedUser, requireGenerateRateLimit, requireOwnedProduct, async (req, res) => {
     try {
-        const { packId, productContext, inputImageId } = req.body;
+        const { packId } = req.body;
+        const productContext = req.product;
+        const inputImageId = req.product.primary_output_id;
         const collection = await CommerceEngine.startRun(req.user.userId, req.params.id, packId, productContext, inputImageId);
         // Return 202 Accepted because the job runs asynchronously
         res.status(202).json(collection);
@@ -2903,9 +2905,11 @@ app.get('/api/engines/campaign_blueprint/packs', auth.requireAuth, async (req, r
 });
 
 // Start a Campaign Blueprint Run
-app.post('/api/products/:id/jobs/campaign_blueprint', auth.requireAuth, async (req, res) => {
+app.post('/api/products/:id/jobs/campaign_blueprint', auth.requireAuth, requireVerifiedUser, requireGenerateRateLimit, requireOwnedProduct, async (req, res) => {
     try {
-        const { packId, productContext, inputImageId } = req.body;
+        const { packId } = req.body;
+        const productContext = req.product;
+        const inputImageId = req.product.primary_output_id;
         const collection = await BlueprintEngine.startRun(req.user.userId, req.params.id, packId, productContext, inputImageId);
         res.status(202).json(collection);
     } catch (error) {
@@ -2916,9 +2920,10 @@ app.post('/api/products/:id/jobs/campaign_blueprint', auth.requireAuth, async (r
 });
 
 // Start Campaign Production Run
-app.post('/api/products/:id/jobs/campaign_production', auth.requireAuth, async (req, res) => {
+app.post('/api/products/:id/jobs/campaign_production', auth.requireAuth, requireVerifiedUser, requireGenerateRateLimit, requireOwnedProduct, async (req, res) => {
     try {
-        const { blueprintId, conceptIds, productContext } = req.body;
+        const { blueprintId, conceptIds } = req.body;
+        const productContext = req.product;
         const collection = await ProductionEngine.startRun(req.user.userId, req.params.id, blueprintId, conceptIds, productContext);
         res.status(202).json(collection);
     } catch (error) {
@@ -2991,6 +2996,8 @@ app.put('/api/products/:id/primary-output', auth.requireAuth, async (req, res) =
             return res.status(403).json({ error: 'Unauthorized' });
         }
 
+        if (!outputId) return res.status(400).json({ error: 'outputId is required' });
+        await validateProductOutput(product.id, outputId);
         const { error } = await supabaseAdmin
             .from('products')
             .update({ primary_output_id: outputId })
@@ -3000,7 +3007,7 @@ app.put('/api/products/:id/primary-output', auth.requireAuth, async (req, res) =
         res.json({ success: true });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: error.message });
+        res.status(error.status || 500).json({ error: error.status ? error.message : 'Could not set primary output' });
     }
 });
 

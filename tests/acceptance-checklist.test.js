@@ -139,7 +139,7 @@ describe('acceptance checklist', { skip }, () => {
 
             assert.strictEqual((await db.getUserPlan(user.id)).plan, 'hobbyist_ltd');
             assert.strictEqual(await entitlements.hasFeature(user.id, entitlements.FEATURES.BULK_GENERATION), false, 'the plan no longer on the account must not still grant bulk');
-            assert.strictEqual(await entitlements.hasFeature(user.id, entitlements.FEATURES.COMMERCIAL_LICENSE), false);
+            assert.strictEqual(await entitlements.hasFeature(user.id, entitlements.FEATURES.COMMERCIAL_LICENSE), true, 'commercial use is included in the advertised paid plan');
             assert.strictEqual(await entitlements.hasFeature(user.id, entitlements.FEATURES.AGENCY_LICENSE), false, 'hobbyist_ltd does not include the reseller right');
             assert.strictEqual(await entitlements.hasFeature(user.id, entitlements.FEATURES.PRIORITY_QUEUE), false);
             assert.strictEqual(await entitlements.hasFeature(user.id, entitlements.FEATURES.WATERMARK_REMOVAL), true, 'hobbyist_ltd still includes this one');

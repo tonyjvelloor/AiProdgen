@@ -107,6 +107,44 @@ module.exports = {
         if (error) throw new Error(`setUserPlan failed: ${error.message}`);
         return true;
     },
+    // Compare-and-swap protects the shared monthly allowance across concurrent
+    // requests without requiring a new database migration.
+    reserveGenerationQuota: async (userId, amount, limit) => {
+        if (!Number.isSafeInteger(amount) || amount < 1 || !Number.isSafeInteger(limit)) return null;
+        await module.exports.getUserPlan(userId); // Roll the calendar period if needed.
+        for (let attempt = 0; attempt < 8; attempt++) {
+            const { data: user, error } = await supabaseAdmin.from('users')
+                .select('monthly_gen_count, usage_period_start, is_active').eq('id', userId).single();
+            if (error) throw new Error('Could not read monthly allowance');
+            if (!user || user.is_active === false) return null;
+            const count = Number(user.monthly_gen_count || 0);
+            if (count + amount > limit) return null;
+            const { data: updated, error: updateError } = await supabaseAdmin.from('users')
+                .update({ monthly_gen_count: count + amount }).eq('id', userId)
+                .eq('monthly_gen_count', count).eq('usage_period_start', user.usage_period_start)
+                .select('id').maybeSingle();
+            if (updateError) throw new Error('Could not reserve monthly allowance');
+            if (updated) return { amount, period: user.usage_period_start };
+        }
+        throw new Error('Monthly allowance is busy. Please retry.');
+    },
+    releaseGenerationQuota: async (userId, reservation) => {
+        if (!reservation) return;
+        for (let attempt = 0; attempt < 8; attempt++) {
+            const { data: user, error } = await supabaseAdmin.from('users')
+                .select('monthly_gen_count, usage_period_start').eq('id', userId).single();
+            if (error) throw new Error('Could not read monthly allowance');
+            if (!user || user.usage_period_start !== reservation.period) return;
+            const count = Number(user.monthly_gen_count || 0);
+            const { data: updated, error: updateError } = await supabaseAdmin.from('users')
+                .update({ monthly_gen_count: Math.max(0, count - reservation.amount) }).eq('id', userId)
+                .eq('monthly_gen_count', count).eq('usage_period_start', reservation.period)
+                .select('id').maybeSingle();
+            if (updateError) throw new Error('Could not restore monthly allowance');
+            if (updated) return;
+        }
+        throw new Error('Could not restore monthly allowance after concurrent updates');
+    },
     incrementGenCount: async (userId) => {
         const { data } = await supabaseAdmin.from('users').select('monthly_gen_count').eq('id', userId).single();
         const { error } = await supabaseAdmin.from('users')

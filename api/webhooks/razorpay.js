@@ -91,14 +91,80 @@ async function handler(req, res) {
       return res.status(200).send('Skipped: No payment entity');
     }
 
+    const { getPlanConfig, planForOrder, isLifetimeOfferOrder } = require('../../lib/plans');
     const notes = payment.notes || {};
-    const userId = notes.user_id || notes.userId;
+    let userId = notes.user_id || notes.userId;
+    let email = notes.email || payment.email;
     const creditsToGrant = notes.credits ? parseInt(notes.credits, 10) : null;
-    const featureOrProduct = notes.product_id || notes.feature || notes.plan;
+    let planId = notes.plan || (notes.type === 'plan_subscription' ? notes.plan : null);
+    const featureOrProduct = notes.product_id || notes.feature;
     const quantity = notes.quantity ? parseInt(notes.quantity, 10) : null;
 
+    // Check if this payment was already fulfilled
+    if (isSupabaseConfigured) {
+      const { data: existingPayment } = await supabaseAdmin
+        .from('payments')
+        .select('razorpay_payment_id, user_id, plan_id')
+        .eq('razorpay_payment_id', payment.id)
+        .maybeSingle();
+
+      if (existingPayment) {
+        console.log(`[webhook] payment ${payment.id} already fulfilled in ledger`);
+        return res.status(200).send('Already processed');
+      }
+    }
+
+    // Resolve pending order if exists
+    let pendingOrder = null;
+    if (isSupabaseConfigured && payment.order_id) {
+      pendingOrder = await db.getPendingOrder(payment.order_id);
+      if (pendingOrder) {
+        email = email || pendingOrder.email;
+        if (!planId) {
+          planId = planForOrder(pendingOrder);
+        }
+      }
+    }
+
+    // Resolve user by email if not provided in notes
+    if (!userId && email && isSupabaseConfigured) {
+      const existingUser = await db.getUserByEmail(email);
+      if (existingUser) {
+        userId = existingUser.id;
+      }
+    }
+
+    // Reconcile guest lifetime acquisition checkout if user not yet registered (browser closed after paying)
+    if (!userId && email && isSupabaseConfigured && (notes.type === 'acquisition_lifetime' || isLifetimeOfferOrder(pendingOrder))) {
+      try {
+        const auth = require('../../auth');
+        const emailService = require('../../lib/email');
+        const credentials = await auth.registerUser(
+          email,
+          payment.id,
+          payment.order_id,
+          payment.amount,
+          payment.currency || 'USD'
+        );
+        const newUser = await db.getUserByEmail(email);
+        if (newUser) {
+          userId = newUser.id;
+          if (credentials?.password) {
+            await emailService.sendCredentialsEmail(email, credentials.password).catch(e => console.error(e));
+          }
+        }
+      } catch (regErr) {
+        if (!regErr.message?.includes('already registered')) {
+          console.error('[webhook] Failed to auto-register user on payment:', regErr.message);
+          throw regErr;
+        }
+        const existing = await db.getUserByEmail(email);
+        if (existing) userId = existing.id;
+      }
+    }
+
     if (!userId) {
-      console.warn(`[webhook] payment ${payment.id} has no user_id in notes -- nothing to grant`);
+      console.warn(`[webhook] payment ${payment.id} has no user_id and could not resolve user -- skipping grant`);
       return res.status(200).send('Skipped: No user data');
     }
 
@@ -108,13 +174,41 @@ async function handler(req, res) {
         paymentId: payment.id,
         orderId: payment.order_id,
         userId,
-        kind: creditsToGrant ? 'credits' : (featureOrProduct ? 'feature' : 'unknown'),
+        email,
+        kind: planId ? 'plan' : (creditsToGrant ? 'credits' : (featureOrProduct ? 'feature' : 'unknown')),
+        planId: planId || null,
         credits: creditsToGrant,
         amount: payment.amount,
         currency: payment.currency || 'INR'
       });
 
-      // 2. Fulfill Credit Pack Grants if applicable
+      // 2. Fulfill Plan Subscriptions / Lifetime Deals (Browser closed after checkout)
+      if (planId) {
+        const planConfig = getPlanConfig(planId);
+        await db.setUserPlan(userId, planId, 'lifetime');
+        await db.initUserCredits(userId);
+        await db.addCredits(userId, planConfig.upscale);
+        await entitlements.seedPlanEntitlements(userId, planId, planConfig)
+          .catch(e => console.error('[webhook] seed entitlements error:', e.message));
+
+        if (payment.order_id) {
+          await db.deletePendingOrder(payment.order_id).catch(() => {});
+        }
+
+        await referrals.recordEligiblePayment({
+          userId,
+          paymentId: payment.id,
+          orderId: payment.order_id,
+          kind: 'plan',
+          planId,
+          grossAmountCents: payment.amount,
+          currency: payment.currency || 'INR'
+        }).catch(e => console.error('[webhook] commission recording failed:', e.message));
+
+        console.log(`[webhook] Successfully fulfilled plan ${planId} for user ${userId} (${email})`);
+      }
+
+      // 3. Fulfill Credit Pack Grants if applicable
       if (creditsToGrant && creditsToGrant > 0) {
         const { data: existingTx } = await supabaseAdmin.from('credit_transactions')
           .select('id')
@@ -134,8 +228,8 @@ async function handler(req, res) {
         }
       }
 
-      // 3. Fulfill Entitlement / Feature Grants if applicable
-      if (featureOrProduct) {
+      // 4. Fulfill Entitlement / Feature Grants if applicable
+      if (featureOrProduct && !planId) {
         await entitlements.grantEntitlement({
           userId: userId,
           feature: featureOrProduct,
@@ -146,7 +240,7 @@ async function handler(req, res) {
         console.log(`[webhook] Successfully granted entitlement ${featureOrProduct} to user ${userId}`);
       }
 
-      // 4. Mark webhook processed in audit ledger
+      // 5. Mark webhook processed in audit ledger
       if (isSupabaseConfigured) {
         const { error: updateErr } = await supabaseAdmin.from('webhook_events')
           .update({ processed: true, processed_at: new Date().toISOString() })

@@ -1,82 +1,52 @@
-require('dotenv').config();
 const { test, describe } = require('node:test');
-const assert = require('node:assert');
+const assert = require('node:assert/strict');
+// These are unit contracts. A fake UUID against a live database cannot prove
+// double-debit safety and must not modify a developer's real credit ledger.
+const supabasePath = require.resolve('../lib/supabase');
+let rpcResult = { data: true, error: null };
+let queryResult = { data: null, error: null };
+const calls = [];
+const query = new Proxy({}, { get(_target, name) {
+    if (name === 'then') return resolve => resolve(queryResult);
+    return (...args) => { calls.push([name, ...args]); return query; };
+} });
+require.cache[supabasePath] = { id: supabasePath, filename: supabasePath, loaded: true, exports: {
+    isSupabaseConfigured: true,
+    supabaseAdmin: { rpc: async (...args) => { calls.push(['rpc', ...args]); return rpcResult; }, from: () => query }
+} };
 const db = require('../database');
-
-describe('credit reservation invariants, concurrency & idempotency', () => {
-    test('reserveCredits rejects zero or negative amounts', async () => {
-        const resZero = await db.reserveCredits('user-1', 0, 'ref-1');
-        assert.strictEqual(resZero, false);
-        const resNeg = await db.reserveCredits('user-1', -5, 'ref-2');
-        assert.strictEqual(resNeg, false);
+describe('credit reservation contracts without a live database', () => {
+    test('rejects invalid amounts and missing users before RPC', async () => {
+        calls.length = 0;
+        for (const amount of [0, -1]) assert.equal(await db.reserveCredits('user', amount, 'run'), false);
+        assert.equal(await db.reserveCredits(null, 1, 'run'), false);
+        assert.equal(calls.length, 0);
     });
-
-    test('reserveCredits rejects when userId is null/undefined', async () => {
-        const res = await db.reserveCredits(null, 1, 'ref-1');
-        assert.strictEqual(res, false);
+    test('uses the atomic database function with the same reference on retries', async () => {
+        calls.length = 0;
+        rpcResult = { data: true, error: null };
+        assert.equal(await db.reserveCredits('user', 1, 'run'), true);
+        assert.equal(await db.reserveCredits('user', 1, 'run'), true);
+        assert.deepEqual(calls, Array(2).fill(['rpc', 'reserve_credits', { p_user_id: 'user', p_amount: 1, p_reference_id: 'run' }]));
     });
-
-    test('repeated calls with the same referenceId are idempotent and do not double-debit', async () => {
-        const testUserId = '00000000-0000-0000-0000-000000000001';
-        const referenceId = `idempotent_test_${Date.now()}`;
-
-        // Attempt reservations with the identical referenceId
-        const res1 = await db.reserveCredits(testUserId, 1, referenceId);
-        const res2 = await db.reserveCredits(testUserId, 1, referenceId);
-
-        // Result is boolean; both calls should complete without unhandled crash
-        assert.strictEqual(typeof res1, 'boolean');
-        assert.strictEqual(typeof res2, 'boolean');
+    test('does not bypass an atomic insufficient-balance result', async () => {
+        rpcResult = { data: false, error: null };
+        assert.equal(await db.reserveCredits('user', 1, 'run'), false);
     });
-
-    test('concurrent reservation requests with identical referenceId resolve safely without double-debit', async () => {
-        const testUserId = '00000000-0000-0000-0000-000000000001';
-        const referenceId = `concurrent_ref_${Date.now()}`;
-        const results = await Promise.all([
-            db.reserveCredits(testUserId, 1, referenceId),
-            db.reserveCredits(testUserId, 1, referenceId),
-            db.reserveCredits(testUserId, 1, referenceId)
-        ]);
-        assert.ok(results.every(r => typeof r === 'boolean'));
+    test('fails closed on RPC errors in production', async () => {
+        const original = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'production';
+        rpcResult = { data: null, error: { message: 'unavailable', code: 'XX000' } };
+        try { await assert.rejects(db.reserveCredits('user', 1, 'run'), /reserveCredits failed/); }
+        finally { process.env.NODE_ENV = original; }
     });
-
-    test('reserveCredits fails closed when RPC errors in production environment', async () => {
-        const originalEnv = process.env.NODE_ENV;
-        const originalFallback = process.env.ALLOW_UNSAFE_CREDIT_FALLBACK;
-        try {
-            process.env.NODE_ENV = 'production';
-            delete process.env.ALLOW_UNSAFE_CREDIT_FALLBACK;
-            await assert.rejects(async () => {
-                await db.reserveCredits('00000000-0000-0000-0000-000000000001', 1, 'probe_fail_closed');
-            }, /reserveCredits failed/);
-        } finally {
-            process.env.NODE_ENV = originalEnv;
-            if (originalFallback !== undefined) process.env.ALLOW_UNSAFE_CREDIT_FALLBACK = originalFallback;
-        }
+    test('an unknown refunded payment cannot subtract credits', async () => {
+        queryResult = { data: null, error: null };
+        assert.equal((await db.reverseCreditPurchase('unknown')).reason, 'not_a_credit_pack');
+        assert.equal((await db.reverseCreditPurchase(null)).reversed, false);
     });
-
-    test('reverseCreditPurchase reverses credit purchase ledger entries idempotently', async () => {
-        const fakePaymentId = `pay_refund_test_${Date.now()}`;
-        
-        // When paymentId does not exist as a credit pack, it returns reversed: false without crashing
-        const resultNonExistent = await db.reverseCreditPurchase(fakePaymentId);
-        assert.strictEqual(resultNonExistent.reversed, false);
-        assert.strictEqual(resultNonExistent.reason, 'not_a_credit_pack');
-
-        // Calling with null returns reversed: false
-        const resultNull = await db.reverseCreditPurchase(null);
-        assert.strictEqual(resultNull.reversed, false);
-    });
-
-    test('getUserCredits propagates database failures rather than returning a false zero balance', async () => {
-        // If a query against nonexistent/invalid input or network error fails, it throws an Error
-        const fakeUserId = 'invalid-uuid-format-that-triggers-db-error';
-        try {
-            const credits = await db.getUserCredits(fakeUserId);
-            assert.strictEqual(typeof credits, 'number');
-        } catch (err) {
-            assert.ok(err instanceof Error);
-            assert.ok(err.message.includes('getUserCredits failed'));
-        }
+    test('a failed balance query throws rather than inventing a zero balance', async () => {
+        queryResult = { data: null, error: { message: 'database unavailable' } };
+        await assert.rejects(db.getUserCredits('user'), /getUserCredits failed: database unavailable/);
     });
 });
