@@ -196,8 +196,18 @@
                         brand: data.brand || '',
                         category: data.category || '',
                         usp: data.usp || '',
-                        audience: data.audience || ''
+                        audience: data.target_audience || data.audience || ''
                     };
+                    // If a collection_id was requested or a completed blueprint already exists, display it
+                    const requestedCollectionId = urlParams.get('collection_id');
+                    const cols = Array.isArray(data.output_collections) ? data.output_collections : [];
+                    const existingBp = requestedCollectionId
+                        ? cols.find(c => String(c.id) === String(requestedCollectionId))
+                        : cols.find(c => (c.job === 'campaign_blueprint' || c.engine === 'campaign_blueprint') && c.status === 'completed' && Array.isArray(c.outputs) && c.outputs.length > 0);
+                    if (existingBp && Array.isArray(existingBp.outputs) && existingBp.outputs.length > 0) {
+                        currentCollectionId = existingBp.id;
+                        showResults(existingBp);
+                    }
                 }
             } catch (e) {
                 console.error('Failed to fetch product context');
@@ -275,15 +285,24 @@
                     })
                 });
                 
-                if (!res.ok) throw new Error('Failed to start blueprint');
+                if (!res.ok) {
+                    const errBody = await res.json().catch(() => ({}));
+                    throw new Error(errBody.error || 'Failed to start blueprint');
+                }
                 const collection = await res.json();
                 
                 startPolling(collection.id);
             } catch (e) {
                 console.error(e);
-                alert('Error starting blueprint run');
                 document.getElementById('stage-config').classList.remove('hidden');
                 document.getElementById('stage-processing').classList.add('hidden');
+                if (/Gemini API key/i.test(e.message)) {
+                    if (confirm(e.message + '\n\nWould you like to connect your free Google Gemini API key now (takes 60 seconds)?')) {
+                        window.location.href = '/dashboard.html?setupKey=1';
+                    }
+                } else {
+                    alert(e.message || 'Error starting blueprint run');
+                }
             }
         });
 

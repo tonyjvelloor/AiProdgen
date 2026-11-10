@@ -138,20 +138,65 @@
             window.location.href = '/login.html';
         }
 
-        // Simulating DB fetch for now
-        function renderMockGallery(newImageUrl = null) {
+        // Fetch real user creations from workspace outputs and generation history
+        async function renderMockGallery(newImageUrl = null) {
             const gallery = document.getElementById('gallery');
             const emptyState = document.getElementById('emptyState');
-            
+            const loadingState = document.getElementById('loadingState');
+            const token = localStorage.getItem('token');
+
+            if (loadingState) loadingState.classList.remove('hidden');
+
             const items = [];
             if (newImageUrl) {
                 items.push({
                     url: newImageUrl,
-                    preset: 'Minimal Studio Podium',
-                    category: 'Skincare',
+                    preset: 'Studio Generation',
+                    category: 'New Output',
                     date: 'Just now'
                 });
             }
+
+            try {
+                const [wsRes, histRes] = await Promise.all([
+                    fetch('/api/workspace/outputs', { headers: { 'Authorization': `Bearer ${token}` } }).catch(() => null),
+                    fetch('/api/user/history', { headers: { 'Authorization': `Bearer ${token}` } }).catch(() => null)
+                ]);
+
+                if (wsRes && wsRes.ok) {
+                    const wsOutputs = await wsRes.json();
+                    (wsOutputs || []).forEach(o => {
+                        if (o.storage_path && (!newImageUrl || o.storage_path !== newImageUrl)) {
+                            items.push({
+                                url: o.storage_path,
+                                preset: o.format || o.collection_name || 'Studio Render',
+                                category: o.product_name || o.engine || 'Product',
+                                date: o.created_at ? new Date(o.created_at).toLocaleDateString() : 'Saved'
+                            });
+                        }
+                    });
+                }
+
+                if (histRes && histRes.ok) {
+                    const hist = await histRes.json();
+                    const list = Array.isArray(hist) ? hist : (hist.history || []);
+                    list.forEach(h => {
+                        const url = h.output_url || h.image_url || h.storage_path;
+                        if (url && !items.some(i => i.url === url)) {
+                            items.push({
+                                url,
+                                preset: h.style || h.prompt || 'AI Studio Render',
+                                category: h.category || 'Quick Studio',
+                                date: h.created_at ? new Date(h.created_at).toLocaleDateString() : 'Saved'
+                            });
+                        }
+                    });
+                }
+            } catch (e) {
+                console.error('Failed to load creations:', e);
+            }
+
+            if (loadingState) loadingState.classList.add('hidden');
             
             if (items.length === 0) {
                 emptyState.classList.remove('hidden');

@@ -468,9 +468,15 @@ app.post('/api/products', auth.requireAuth, async (req, res) => {
 app.get('/api/products/:id', auth.requireAuth, async (req, res) => {
     try {
         const product = await ProductService.getProductById(req.params.id);
+        if (!product) {
+            return res.status(404).json({ error: 'Product not found' });
+        }
         const workspace = await WorkspaceService.getOrCreateWorkspace(req.user.userId);
         if (product.workspace_id !== workspace.id) {
             return res.status(403).json({ error: 'Unauthorized' });
+        }
+        if (!Array.isArray(product.output_collections)) {
+            product.output_collections = await OutputService.getProductTimeline(product.id).catch(() => []);
         }
         res.json(product);
     } catch (error) {
@@ -3012,18 +3018,34 @@ app.get('/api/workspace/outputs', auth.requireAuth, async (req, res) => {
 
         // Flatten the joined product so the client does not depend on the
         // shape of the Supabase embed.
-        res.json((outputs || []).map((o) => ({
-            id: o.id,
-            product_id: o.product_id,
-            product_name: o.products ? o.products.name : 'Untitled product',
-            collection_id: o.collection_id,
-            engine: o.engine || 'original_upload',
-            format: o.format,
-            type: o.type,
-            status: o.status,
-            storage_path: o.storage_path,
-            created_at: o.created_at
-        })));
+        const ENGINE_LABELS = {
+            photography: 'Photography Studio',
+            commerce: 'Commerce Launch Pack',
+            campaign_blueprint: 'Campaign Blueprint',
+            blueprint: 'Campaign Blueprint',
+            campaign_production: 'Campaign Production',
+            creative_testing: 'Creative Testing',
+            manual: 'Original Upload',
+            original_upload: 'Original Upload'
+        };
+
+        res.json((outputs || []).map((o) => {
+            const eng = o.engine || 'original_upload';
+            return {
+                id: o.id,
+                product_id: o.product_id,
+                product_name: o.products ? o.products.name : 'Untitled product',
+                collection_id: o.collection_id,
+                collection_name: ENGINE_LABELS[eng] || eng.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+                engine: eng,
+                format: o.format,
+                type: o.type,
+                status: o.status,
+                metadata: o.metadata || {},
+                storage_path: o.storage_path,
+                created_at: o.created_at
+            };
+        }));
     } catch (error) {
         console.error('Workspace outputs error:', error);
         res.status(500).json({ error: 'Failed to load content' });

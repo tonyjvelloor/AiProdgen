@@ -230,17 +230,16 @@
                     renderHeader();
                     renderBrief();
                     
-                    // MOCKING collections for now until we have real data from engines
-                    // We assume 'original_upload' is always done if a product exists.
-                    // A real implementation would parse productData.output_collections to get completed job IDs.
+                    // Parse real completed output_collections from the database
                     let completedJobs = new Set(['original_upload']);
-                    
-                    // Check if photography collection exists
-                    if (productData.output_collections && productData.output_collections.some(c => c.engine === 'photography')) {
-                        completedJobs.add('photography');
-                    }
-                    if (productData.output_collections && productData.output_collections.some(c => c.engine === 'commerce')) {
-                        completedJobs.add('commerce');
+                    if (Array.isArray(productData.output_collections)) {
+                        productData.output_collections.forEach(c => {
+                            const jobKey = c.job || c.engine;
+                            if (jobKey && (c.status === 'completed' || !c.status)) {
+                                if (jobKey === 'blueprint') completedJobs.add('campaign_blueprint');
+                                else completedJobs.add(jobKey);
+                            }
+                        });
                     }
 
                     renderJobs(completedJobs);
@@ -291,6 +290,25 @@
             document.getElementById('briefDescription').value = productData.description || '';
         }
 
+        function getJobUrl(jobId) {
+            if (jobId === 'campaign_blueprint') {
+                return `/blueprint.html?product_id=${productId}`;
+            }
+            if (jobId === 'campaign_production') {
+                const cols = Array.isArray(productData?.output_collections) ? productData.output_collections : [];
+                const latestBp = cols.find(c => (c.job === 'campaign_blueprint' || c.engine === 'campaign_blueprint') && c.status === 'completed');
+                if (latestBp) {
+                    const conceptIds = (latestBp.outputs || []).filter(o => o.type === 'blueprint_json').map(o => o.id).join(',');
+                    if (conceptIds) {
+                        return `/production.html?product_id=${productId}&blueprint_id=${latestBp.id}&concepts=${conceptIds}`;
+                    }
+                    return `/blueprint.html?product_id=${productId}&collection_id=${latestBp.id}`;
+                }
+                return `/blueprint.html?product_id=${productId}`;
+            }
+            return `/${jobId}.html?product_id=${productId}`;
+        }
+
         function renderJobs(completedJobs) {
             const container = document.getElementById('jobsList');
             container.innerHTML = '';
@@ -301,7 +319,7 @@
                 const isActive = job.status === 'active';
                 
                 let linkUrl = '#';
-                if (isActive) linkUrl = `/${job.id}.html?product_id=${productId}`;
+                if (isActive) linkUrl = getJobUrl(job.id);
 
                 const iconColor = isActive ? 'text-primary' : 'text-gray-400';
                 const bgIcon = isActive ? 'bg-blue-50' : 'bg-gray-100';
@@ -313,7 +331,7 @@
                 
                 const btnHtml = isActive && !isCompleted 
                     ? `<a href="${linkUrl}" class="btn btn-secondary text-xs">Generate</a>`
-                    : (isCompleted ? `<a href="/content-library.html?product=${productId}&job=${job.id}" class="text-sm font-medium text-primary hover:text-blue-700">View Assets &rarr;</a>` : '');
+                    : (isCompleted ? `<div class="flex items-center gap-3"><a href="${linkUrl}" class="text-xs font-medium text-gray-500 hover:text-gray-900">Run Again</a><a href="/content-library.html?product=${productId}&job=${job.id}" class="text-sm font-medium text-primary hover:text-blue-700">View Assets &rarr;</a></div>` : '');
 
                 const cardHtml = `
                     <div class="job-card ${isActive ? 'active' : 'disabled'}" ${!isActive ? 'onclick="alert(\'Coming Soon\')"' : ''}>
@@ -374,14 +392,16 @@
         function renderMarketplaceReadiness(completedJobs) {
             // Calculate estimated time saved
             let hoursSaved = 0;
-            if (completedJobs.has('photography')) hoursSaved += 2.5; // Example: 2.5 hours for photo shoot
-            if (completedJobs.has('commerce')) hoursSaved += 4.2; // Example: 4.2 hours for listing creation
+            if (completedJobs.has('photography')) hoursSaved += 2.5;
+            if (completedJobs.has('commerce')) hoursSaved += 4.2;
+            if (completedJobs.has('campaign_blueprint')) hoursSaved += 1.5;
+            if (completedJobs.has('campaign_production')) hoursSaved += 3.0;
             
             document.getElementById('timeSaved').textContent = `${hoursSaved.toFixed(1)} hours`;
-            // Simplified marketplace readiness for Amazon based on Commerce job completion
+            const hasPhotos = completedJobs.has('photography') || completedJobs.has('commerce');
             const mptList = [
-                { id: 'hero', name: 'Hero Image', completed: completedJobs.has('commerce') },
-                { id: 'lifestyle', name: 'Lifestyle', completed: completedJobs.has('commerce') },
+                { id: 'hero', name: 'Hero Image', completed: hasPhotos },
+                { id: 'lifestyle', name: 'Lifestyle', completed: hasPhotos },
                 { id: 'desc', name: 'Description', completed: completedJobs.has('commerce') },
                 { id: 'seo', name: 'SEO Content', completed: completedJobs.has('commerce') },
                 { id: 'info', name: 'Infographic', completed: completedJobs.has('commerce') },
@@ -437,7 +457,7 @@
                 } else if (nextJob.status === 'active') {
                     document.getElementById('nextActionTitle').textContent = `Generate ${nextJob.title}`;
                     document.getElementById('nextActionDesc').textContent = nextJob.description;
-                    document.getElementById('nextActionBtn').href = `/${nextJob.id}.html?product_id=${productId}`;
+                    document.getElementById('nextActionBtn').href = getJobUrl(nextJob.id);
                     document.getElementById('nextActionBtn').textContent = 'Start Now';
                 } else {
                     document.getElementById('nextActionTitle').textContent = `Prepare for ${nextJob.title}`;
@@ -454,8 +474,39 @@
 
         function renderActivityFeed() {
             const timeline = document.getElementById('activityFeed');
-            const dateStr = new Date(productData.created_at).toLocaleString();
+            const dateStr = new Date(productData.created_at || Date.now()).toLocaleString();
+            const cols = Array.isArray(productData.output_collections) ? productData.output_collections : [];
+            const JOB_LABELS = {
+                photography: { title: 'Product Photography Generated', icon: 'camera' },
+                commerce: { title: 'Marketplace Launch Pack Generated', icon: 'shopping-bag' },
+                campaign_blueprint: { title: 'Campaign Blueprint Architected', icon: 'target' },
+                blueprint: { title: 'Campaign Blueprint Architected', icon: 'target' },
+                campaign_production: { title: 'Campaign Assets Produced', icon: 'layers' },
+                creative_testing: { title: 'Creative Matrix Generated', icon: 'sparkles' }
+            };
+
+            let itemsHtml = cols
+                .filter(c => (c.job || c.engine) !== 'initial_upload')
+                .map(c => {
+                    const key = c.job || c.engine || 'photography';
+                    const meta = JOB_LABELS[key] || { title: `${key} (${c.status || 'completed'})`, icon: 'check-circle' };
+                    const count = Array.isArray(c.outputs) ? c.outputs.length : 0;
+                    const ts = new Date(c.created_at || Date.now()).toLocaleString();
+                    return `
+                        <div class="relative mb-8">
+                            <div class="absolute -left-[21px] top-1 w-10 h-10 bg-white rounded-full flex items-center justify-center border-2 border-primary shadow-sm">
+                                <i data-lucide="${meta.icon}" class="w-5 h-5 text-primary"></i>
+                            </div>
+                            <div class="ml-8">
+                                <h4 class="text-sm font-bold text-gray-900">${meta.title}</h4>
+                                <p class="text-xs text-gray-500 mt-0.5">${count} output(s) • ${ c.status || 'completed' } • ${ts}</p>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
             timeline.innerHTML = `
+                ${itemsHtml}
                 <div class="relative">
                     <div class="absolute -left-[21px] top-1 w-10 h-10 bg-white rounded-full flex items-center justify-center border-2 border-primary shadow-sm">
                         <i data-lucide="package-plus" class="w-5 h-5 text-primary"></i>
