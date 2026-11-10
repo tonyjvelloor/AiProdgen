@@ -246,15 +246,24 @@
                     body: JSON.stringify({ packId: selectedPackId, aspectRatio })
                 });
                 
-                if (!res.ok) throw new Error('Failed to start shoot');
+                if (!res.ok) {
+                    const errBody = await res.json().catch(() => ({}));
+                    throw new Error(errBody.error || 'Failed to start shoot');
+                }
                 const collection = await res.json();
                 
                 startPolling(collection.id);
             } catch (e) {
                 console.error(e);
-                alert('Error starting shoot');
                 document.getElementById('stage-config').classList.remove('hidden');
                 document.getElementById('stage-processing').classList.add('hidden');
+                if (/Gemini API key/i.test(e.message)) {
+                    if (confirm(e.message + '\n\nWould you like to connect your free Google Gemini API key now (takes 60 seconds)?')) {
+                        window.location.href = '/dashboard.html?setupKey=1';
+                    }
+                } else {
+                    alert(e.message || 'Error starting shoot');
+                }
             }
         });
 

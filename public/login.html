@@ -90,6 +90,19 @@
                 <span id="errorText"></span>
             </div>
 
+            <!-- Upfront 60-Second Free Explorer Onboarding Notice (Shown on Sign Up) -->
+            <div id="signupBenefits" class="hidden mb-5 p-3.5 rounded-xl bg-blue-50/80 border border-blue-200/80 text-xs text-slate-700 space-y-2">
+                <div class="font-bold text-brand-700 flex items-center gap-1.5">
+                    <i data-lucide="sparkles" class="w-3.5 h-3.5 text-brand-600"></i>
+                    <span>How Free Explorer Works (60-Second Setup)</span>
+                </div>
+                <ol class="space-y-1 text-slate-600 pl-4 list-decimal">
+                    <li><strong>Create your account</strong> — No credit card required.</li>
+                    <li><strong>Connect your free Gemini key</strong> — Paste a free key from Google AI Studio in 60 seconds (AES-256 encrypted).</li>
+                    <li><strong>Generate 20 assets/month</strong> — $0 platform fee, zero markup.</li>
+                </ol>
+            </div>
+
             <!-- Auth Form -->
             <form id="authForm" onsubmit="handleAuth(event)" class="space-y-4">
                 <div>
@@ -196,6 +209,7 @@
             const forgotPasswordLink = document.getElementById('forgotPasswordLink');
             const pageTitle = document.getElementById('pageTitle');
             const pageSubtitle = document.getElementById('pageSubtitle');
+            const signupBenefits = document.getElementById('signupBenefits');
 
             // Clear errors
             document.getElementById('errorMessage').classList.add('hidden');
@@ -208,16 +222,27 @@
                 pageSubtitle.textContent = 'Sign in to access your product catalog and marketing studio';
                 passwordHint.classList.add('hidden');
                 forgotPasswordLink.classList.remove('hidden');
+                if (signupBenefits) signupBenefits.classList.add('hidden');
             } else {
                 tabSignup.className = 'flex-1 pb-3 text-sm font-semibold text-brand-600 border-b-2 border-brand-600 transition-colors';
                 tabLogin.className = 'flex-1 pb-3 text-sm font-semibold text-slate-500 hover:text-slate-700 border-b-2 border-transparent transition-colors';
                 submitBtn.textContent = 'Create Free Workspace';
                 pageTitle.textContent = 'Create your account';
-                pageSubtitle.textContent = 'Start with 20 free monthly AI product generations';
+                pageSubtitle.textContent = 'Start with 20 free monthly AI product generations (BYOK)';
                 passwordHint.classList.remove('hidden');
                 forgotPasswordLink.classList.add('hidden');
+                if (signupBenefits) signupBenefits.classList.remove('hidden');
+                if (window.lucide) lucide.createIcons();
             }
         }
+
+        // Automatically switch to Create Account tab when linked with ?mode=signup or #signup
+        (function initTabFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('mode') === 'signup' || window.location.hash === '#signup') {
+                switchTab('signup');
+            }
+        })();
 
         async function handleAuth(e) {
             e.preventDefault();

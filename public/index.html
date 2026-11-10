@@ -146,14 +146,34 @@
                     <span id="currencyFlag">🇺🇸</span> <span id="currencyCode">USD</span>
                 </button>
 
-                <a href="/login.html" class="text-xs sm:text-sm font-semibold text-slate-700 hover:text-slate-900 px-3 py-2 rounded-lg transition-colors">
+                <a href="/login.html" class="hidden sm:inline-block text-xs sm:text-sm font-semibold text-slate-700 hover:text-slate-900 px-3 py-2 rounded-lg transition-colors">
                     Sign In
                 </a>
 
-                <a href="/login.html"
+                <a href="/login.html?mode=signup"
                     class="inline-flex items-center justify-center px-3.5 py-2 sm:px-5 sm:py-2.5 text-xs sm:text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm transition-all hover:shadow hover:-translate-y-0.5">
                     Start Free (20 Gens)
                 </a>
+
+                <!-- Mobile Hamburger Button -->
+                <button type="button" onclick="toggleMobileMenu()" aria-label="Toggle navigation menu"
+                    class="lg:hidden p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors">
+                    <i data-lucide="menu" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Mobile Navigation Drawer -->
+        <div id="mobileMenu" class="hidden lg:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-5 space-y-2 shadow-lg">
+            <a href="#pillars" onclick="toggleMobileMenu()" class="block px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">Core Capabilities</a>
+            <a href="#how-it-works" onclick="toggleMobileMenu()" class="block px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">How It Works</a>
+            <a href="#showcase" onclick="toggleMobileMenu()" class="block px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">Showcase</a>
+            <a href="#who-its-for" onclick="toggleMobileMenu()" class="block px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">Who It's For</a>
+            <a href="#pricing" onclick="toggleMobileMenu()" class="block px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">Pricing &amp; Costs</a>
+            <a href="#faq" onclick="toggleMobileMenu()" class="block px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">FAQ</a>
+            <div class="pt-2 border-t border-slate-100 flex items-center gap-2">
+                <a href="/login.html" class="flex-1 text-center py-2.5 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200">Sign In</a>
+                <a href="/login.html?mode=signup" class="flex-1 text-center py-2.5 rounded-lg text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800">Start Free (20 Gens)</a>
             </div>
         </div>
     </nav>
@@ -180,7 +200,7 @@
                     </p>
 
                     <div class="flex flex-col sm:flex-row gap-3.5 justify-center lg:justify-start mb-8">
-                        <a href="/login.html"
+                        <a href="/login.html?mode=signup"
                             class="inline-flex items-center justify-center px-6 py-3.5 rounded-xl font-semibold text-sm sm:text-base text-white bg-slate-900 hover:bg-slate-800 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 gap-2">
                             <span>Get Started Free — 20 Monthly Gens</span>
                             <i data-lucide="arrow-right" class="w-4 h-4"></i>
@@ -223,7 +243,10 @@
                             <img id="heroDisplayImage" src="/landing-v2/sq_slide1.png" alt="Product Photography Transformation" class="w-full h-full object-cover transition-opacity duration-300">
                             
                             <!-- Badges on image -->
-                            <div class="absolute bottom-3 left-3 bg-slate-900/85 backdrop-blur-md text-white text-[11px] font-semibold px-2.5 py-1 rounded-md shadow-sm">
+                            <div class="absolute top-3 left-3 bg-white/95 backdrop-blur-md text-slate-800 text-[10px] font-bold px-2.5 py-1 rounded-md shadow-sm border border-slate-200/80">
+                                Input: Raw Phone Photo &rarr; Output: 2048px Studio Render (~9s)
+                            </div>
+                            <div id="heroSceneBadge" class="absolute bottom-3 left-3 bg-slate-900/85 backdrop-blur-md text-white text-[11px] font-semibold px-2.5 py-1 rounded-md shadow-sm">
                                 Studio Softbox Lighting • Physically Grounded Shadow
                             </div>
                             <div class="absolute top-3 right-3 bg-emerald-600 text-white text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded shadow-sm">
@@ -231,18 +254,29 @@
                             </div>
                         </div>
 
+                        <!-- Generated Copy Preview Strip -->
+                        <div class="mt-2.5 p-2.5 rounded-lg bg-slate-50 border border-slate-200/80 text-left">
+                            <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-brand-600 mb-0.5">
+                                <span>+ Auto-Generated Listing &amp; Ad Hook</span>
+                                <span class="text-slate-400">Included in Run</span>
+                            </div>
+                            <p id="heroCopyPreview" class="text-xs text-slate-700 font-medium line-clamp-2">
+                                "Engineered for street-to-trail versatility: breathable mesh upper with responsive cloud cushioning. Ready for Shopify &amp; Amazon main listing."
+                            </p>
+                        </div>
+
                         <!-- Interactive Category Switches -->
-                        <div class="mt-3 grid grid-cols-4 gap-1.5 text-center">
-                            <button onclick="switchHeroSlide('/landing-v2/sq_slide1.png', this)" class="hero-cat-btn py-1.5 px-2 rounded-lg text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-200 transition">
+                        <div class="mt-2.5 grid grid-cols-4 gap-1.5 text-center">
+                            <button onclick="switchHeroSlide('/landing-v2/sq_slide1.png', this, 'Studio Softbox Lighting • Physically Grounded Shadow', '&quot;Engineered for street-to-trail versatility: breathable mesh upper with responsive cloud cushioning. Ready for Shopify &amp; Amazon main listing.&quot;')" class="hero-cat-btn py-1.5 px-2 rounded-lg text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-200 transition">
                                 Sneakers
                             </button>
-                            <button onclick="switchHeroSlide('/landing-v2/sq_slide2.png', this)" class="hero-cat-btn py-1.5 px-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 border border-transparent transition">
+                            <button onclick="switchHeroSlide('/landing-v2/sq_slide2.png', this, 'Botanical Sunlit Podium • Natural Caustic Reflections', '&quot;Clinical-grade botanical hydration serum: cold-pressed active complex for 24-hour barrier repair and glass-skin luminosity.&quot;')" class="hero-cat-btn py-1.5 px-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 border border-transparent transition">
                                 Skincare
                             </button>
-                            <button onclick="switchHeroSlide('/landing-v2/sq_slide3.png', this)" class="hero-cat-btn py-1.5 px-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 border border-transparent transition">
+                            <button onclick="switchHeroSlide('/landing-v2/sq_slide3.png', this, 'Macro Luxury Velvet Stage • Specular Gem Highlights', '&quot;Hand-finished 18k gold vermeil setting with conflict-free pavé detailing—crafted to catch every angle of light.&quot;')" class="hero-cat-btn py-1.5 px-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 border border-transparent transition">
                                 Jewelry
                             </button>
-                            <button onclick="switchHeroSlide('/landing-v2/sq_slide4.png', this)" class="hero-cat-btn py-1.5 px-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 border border-transparent transition">
+                            <button onclick="switchHeroSlide('/landing-v2/sq_slide4.png', this, 'Outdoor Lifestyle Scene • Crisp Condensation Detail', '&quot;Double-wall vacuum insulated stainless steel keeps beverages ice-cold for 24 hours from studio desk to mountain trail.&quot;')" class="hero-cat-btn py-1.5 px-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 border border-transparent transition">
                                 Drinkware
                             </button>
                         </div>
@@ -429,6 +463,25 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Upfront Product Fidelity & Quality Notice -->
+            <div class="mt-10 bg-blue-50/70 border border-blue-200/80 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div class="flex items-start gap-3.5">
+                    <div class="w-9 h-9 rounded-xl bg-white border border-blue-200 text-brand-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <i data-lucide="shield-check" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-bold text-slate-900">Reference-Locked Product Fidelity &amp; Quality Guidance</h4>
+                        <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+                            AIProdGen uses your uploaded photo as a strict geometric and color reference to preserve your product's silhouette, materials, and lighting. For regulated packaging, nutrition facts, or micro-typography/barcodes, always visually inspect generated outputs or composite your vector label before final print runs.
+                        </p>
+                    </div>
+                </div>
+                <a href="/login.html?mode=signup" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition whitespace-nowrap flex-shrink-0">
+                    <span>Test With Your Product Free</span>
+                    <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+                </a>
+            </div>
         </div>
     </section>
 
@@ -584,11 +637,12 @@
                             <span class="text-[11px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600">FREE</span>
                         </div>
                         <div class="mb-4">
-                            <span class="text-3xl font-extrabold text-slate-900">$0</span>
+                            <span class="text-3xl font-extrabold text-slate-900" data-price-key="free">$0</span>
                             <span class="text-xs text-slate-500">/ forever</span>
+                            <div class="text-[11px] text-slate-400 mt-0.5">No credit card required</div>
                         </div>
                         <p class="text-xs text-slate-500 mb-6">
-                            For testing and occasional catalog updates using your own Gemini API key.
+                            For testing and occasional catalog updates using your own free Gemini API key (60s setup).
                         </p>
                         
                         <ul class="space-y-3 text-xs text-slate-600 mb-8 border-t border-slate-100 pt-6">
@@ -606,12 +660,12 @@
                             </li>
                             <li class="flex items-center gap-2 text-slate-400">
                                 <i data-lucide="minus" class="w-4 h-4 flex-shrink-0"></i>
-                                <span>Personal testing use</span>
+                                <span>Personal evaluation use</span>
                             </li>
                         </ul>
                     </div>
 
-                    <a href="/login.html" class="block w-full text-center py-2.5 px-4 rounded-xl text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 transition">
+                    <a href="/login.html?mode=signup" class="block w-full text-center py-2.5 px-4 rounded-xl text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 transition">
                         Get Started Free
                     </a>
                 </div>
@@ -643,7 +697,7 @@
                             </li>
                             <li class="flex items-center gap-2">
                                 <i data-lucide="check" class="w-4 h-4 text-emerald-600 flex-shrink-0"></i>
-                                <span>Marketplace & Lifestyle packs</span>
+                                <span>Marketplace &amp; Lifestyle packs</span>
                             </li>
                             <li class="flex items-center gap-2">
                                 <i data-lucide="check" class="w-4 h-4 text-emerald-600 flex-shrink-0"></i>
@@ -670,9 +724,9 @@
                             <span class="text-[11px] font-bold px-2 py-0.5 rounded bg-brand-50 text-brand-700 border border-brand-200">LIFETIME</span>
                         </div>
                         <div class="mb-4">
-                            <span class="text-3xl font-extrabold text-slate-900">$97</span>
+                            <span class="text-3xl font-extrabold text-slate-900" data-price-key="pro">$97</span>
                             <span class="text-xs text-slate-500">one-time</span>
-                            <div class="text-[11px] text-slate-400 mt-0.5">Billed in USD (~₹8,150)</div>
+                            <div class="text-[11px] text-slate-400 mt-0.5" id="proAltCurrency">or ~₹8,150 INR ($97 USD checkout)</div>
                         </div>
                         <p class="text-xs text-slate-500 mb-6">
                             For serious e-commerce brands scaling multiple sales channels.
@@ -685,11 +739,11 @@
                             </li>
                             <li class="flex items-center gap-2">
                                 <i data-lucide="check" class="w-4 h-4 text-brand-600 flex-shrink-0"></i>
-                                <span><strong>50 included 4K upscale credits</strong> (Starter pack)</span>
+                                <span><strong>50 included 4K upscale credits</strong> (One-time starter pack)</span>
                             </li>
                             <li class="flex items-center gap-2">
                                 <i data-lucide="check" class="w-4 h-4 text-brand-600 flex-shrink-0"></i>
-                                <span>Campaign Blueprint & Review Engine</span>
+                                <span>Campaign Blueprint &amp; Review Engine</span>
                             </li>
                             <li class="flex items-center gap-2">
                                 <i data-lucide="check" class="w-4 h-4 text-brand-600 flex-shrink-0"></i>
@@ -716,9 +770,9 @@
                             <span class="text-[11px] font-bold px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">LIFETIME</span>
                         </div>
                         <div class="mb-4">
-                            <span class="text-3xl font-extrabold text-slate-900">$197</span>
+                            <span class="text-3xl font-extrabold text-slate-900" data-price-key="agency">$197</span>
                             <span class="text-xs text-slate-500">one-time</span>
-                            <div class="text-[11px] text-slate-400 mt-0.5">Billed in USD (~₹16,500)</div>
+                            <div class="text-[11px] text-slate-400 mt-0.5" id="agencyAltCurrency">or ~₹16,500 INR ($197 USD checkout)</div>
                         </div>
                         <p class="text-xs text-slate-500 mb-6">
                             For agencies and marketing teams managing client deliverables.
@@ -914,13 +968,13 @@
                 Join hundreds of e-commerce brands and agencies producing studio-grade catalog photos, lifestyle scenes, and marketing copy in seconds.
             </p>
             <div class="flex flex-col sm:flex-row gap-4 justify-center">
-                <a href="/login.html"
+                <a href="/login.html?mode=signup"
                     class="inline-flex items-center justify-center px-7 py-4 rounded-xl font-bold text-sm sm:text-base text-slate-900 bg-white hover:bg-slate-100 shadow transition">
                     Start Free (20 Monthly Gens)
                 </a>
                 <a href="#pricing"
                     class="inline-flex items-center justify-center px-7 py-4 rounded-xl font-bold text-sm sm:text-base text-white bg-brand-600 hover:bg-brand-500 shadow transition">
-                    Get Lifetime Access from $47
+                    Get Lifetime Access from <span data-price-key="offer" class="ml-1">$47</span>
                 </a>
             </div>
         </div>
@@ -929,13 +983,19 @@
     <!-- Footer -->
     <footer class="bg-slate-950 text-slate-400 py-14 px-4 border-t border-slate-800 text-sm">
         <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-            <div class="flex items-center gap-2.5">
-                <img src="/logo.png" alt="AIProdGen" class="w-8 h-8 rounded-lg">
-                <span class="font-bold text-white text-base">AIProdGen</span>
-                <span class="text-xs text-slate-500 ml-2">&copy; 2026 AIProdGen. All rights reserved.</span>
+            <div class="flex flex-col sm:flex-row items-center gap-3">
+                <div class="flex items-center gap-2.5">
+                    <img src="/logo.png" alt="AIProdGen" class="w-8 h-8 rounded-lg">
+                    <span class="font-bold text-white text-base">AIProdGen</span>
+                </div>
+                <span class="text-xs text-slate-500">&copy; 2026 AIProdGen Product Content Studio. All rights reserved.</span>
+                <a href="mailto:support@aiprodgen.online" class="text-xs text-slate-400 hover:text-white underline underline-offset-2">
+                    support@aiprodgen.online
+                </a>
             </div>
             
             <div class="flex flex-wrap items-center justify-center gap-6 text-xs font-medium text-slate-400">
+                <a href="/about.html" class="hover:text-white transition">About</a>
                 <a href="/terms.html" class="hover:text-white transition">Terms of Service</a>
                 <a href="/privacy.html" class="hover:text-white transition">Privacy Policy</a>
                 <a href="/refund-policy.html" class="hover:text-white transition">Refund Policy</a>
@@ -986,10 +1046,18 @@
         };
 
         const PRICES = {
-            offer: { USD: 47, INR: 3999 }
+            free: { USD: 0, INR: 0 },
+            offer: { USD: 47, INR: 3999 },
+            pro: { USD: 97, INR: 8150 },
+            agency: { USD: 197, INR: 16500 }
         };
 
-        function switchHeroSlide(src, btn) {
+        function toggleMobileMenu() {
+            const menu = document.getElementById('mobileMenu');
+            if (menu) menu.classList.toggle('hidden');
+        }
+
+        function switchHeroSlide(src, btn, sceneBadgeText, copyPreviewText) {
             document.querySelectorAll('.hero-cat-btn').forEach(b => {
                 b.className = 'hero-cat-btn py-1.5 px-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 border border-transparent transition';
             });
@@ -1001,6 +1069,15 @@
                 img.src = src;
                 img.style.opacity = '1';
             }, 150);
+
+            if (sceneBadgeText) {
+                const badgeEl = document.getElementById('heroSceneBadge');
+                if (badgeEl) badgeEl.textContent = sceneBadgeText;
+            }
+            if (copyPreviewText) {
+                const copyEl = document.getElementById('heroCopyPreview');
+                if (copyEl) copyEl.textContent = copyPreviewText;
+            }
         }
 
         function toggleCurrency() {
@@ -1027,6 +1104,14 @@
             if (altEl) {
                 altEl.textContent = currency === 'INR' ? 'or $47 USD' : 'or ₹3,999 INR';
             }
+            const proAltEl = document.getElementById('proAltCurrency');
+            if (proAltEl) {
+                proAltEl.textContent = currency === 'INR' ? 'Billed as $97 USD at checkout' : 'or ~₹8,150 INR ($97 USD checkout)';
+            }
+            const agencyAltEl = document.getElementById('agencyAltCurrency');
+            if (agencyAltEl) {
+                agencyAltEl.textContent = currency === 'INR' ? 'Billed as $197 USD at checkout' : 'or ~₹16,500 INR ($197 USD checkout)';
+            }
         }
 
         function formatPrice(amount, currency) {
@@ -1036,27 +1121,12 @@
                 : `${symbol}${amount}`;
         }
 
-        async function detectAndSetCurrency() {
+        function detectAndSetCurrency() {
             const saved = localStorage.getItem('preferredCurrency');
             if (saved === 'USD' || saved === 'INR') {
                 currentCurrency = saved;
-                updateCurrencyUI();
-                return;
-            }
-
-            try {
-                const res = await fetch('https://ipapi.co/json/', { cache: 'no-store' });
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.country_code === 'IN') {
-                        currentCurrency = 'INR';
-                    }
-                }
-            } catch (e) {
-                const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                if (tz.includes('Calcutta') || tz.includes('Kolkata') || tz.includes('India')) {
-                    currentCurrency = 'INR';
-                }
+            } else {
+                currentCurrency = 'USD';
             }
             updateCurrencyUI();
         }

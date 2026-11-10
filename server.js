@@ -38,7 +38,7 @@ const { getJwtSecret } = require('./lib/jwtSecret');
 const UsageRecorder = require('./lib/usage_recorder');
 const CostEstimator = require('./lib/cost_estimator');
 const { GEMINI_IMAGE_MODEL, GEMINI_TEXT_MODEL } = require('./lib/models');
-const { getUserProviderKey } = require('./lib/userKeys');
+const { getUserProviderKey, hasUserProviderKey } = require('./lib/userKeys');
 const entitlements = require('./lib/entitlements');
 const referrals = require('./lib/referrals');
 const jwt = require('jsonwebtoken');
@@ -1857,6 +1857,14 @@ app.post('/api/auth/verify', async (req, res) => {
             const user = await db.getUserByEmail(decoded.email);
             const userPlan = user?.plan || 'free';
             const isPaid = !!(user && (user.razorpay_payment_id || (userPlan !== 'free_explorer' && userPlan !== 'free')));
+            let hasGeminiKey = false;
+            if (isSupabaseConfigured && (decoded.userId || user?.id)) {
+                try {
+                    hasGeminiKey = await hasUserProviderKey(decoded.userId || user?.id, 'gemini');
+                } catch (_) {
+                    hasGeminiKey = false;
+                }
+            }
             res.json({
                 valid: true,
                 userId: decoded.userId,
@@ -1865,7 +1873,8 @@ app.post('/api/auth/verify', async (req, res) => {
                 plan: userPlan,
                 planConfig: getPlanConfig(userPlan),
                 monthly_gen_count: user?.monthly_gen_count || 0,
-                monthly_ugc_count: user?.monthly_ugc_count || 0
+                monthly_ugc_count: user?.monthly_ugc_count || 0,
+                hasGeminiKey
             });
         } else {
             res.json({ valid: false, message: 'Invalid or expired token' });

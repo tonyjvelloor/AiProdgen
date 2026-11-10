@@ -36,7 +36,9 @@ const COLUMNS = {
     // added by migrations/004_usage_attribution.sql
     ai_runs: ['funded_by'],
     // added by migrations/005_workspace_status.sql
-    workspaces: ['status']
+    workspaces: ['status'],
+    // added by migrations/009_signup_bonus_and_fulfillment_status.sql
+    payments: ['fulfillment_status']
 };
 
 let failed = false;
@@ -134,8 +136,8 @@ const ok = (m) => console.log(`  ok    ${m}`);
 
     console.log('');
     if (missing.length) {
-        console.log(`${missing.length} missing object(s). Apply migrations/001_production_readiness.sql and`);
-        console.log('migrations/008_atomic_credit_reservation.sql in the Supabase SQL editor, then re-run this check.\n');
+        console.log(`${missing.length} missing object(s). Apply migrations/001_production_readiness.sql,`);
+        console.log('migrations/008_atomic_credit_reservation.sql, and migrations/009_signup_bonus_and_fulfillment_status.sql in the Supabase SQL editor, then re-run this check.\n');
     }
     process.exit(failed ? 1 : 0);
 })().catch((e) => { console.error('\ncheck_deploy crashed:', e.message, '\n'); process.exit(1); });
