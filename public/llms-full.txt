@@ -1,0 +1,30 @@
+# AIProdGen — Complete Product & Technical Reference
+
+Last updated: 2026-11-19
+Website: https://www.aiprodgen.online/
+Support Email: support@aiprodgen.online
+
+## What is AIProdGen?
+AIProdGen is a web-based AI product photography and e-commerce campaign studio built for Shopify merchants, Amazon sellers, D2C brands, dropshippers, and creative agencies. Starting from a single raw product snapshot (PNG, JPG, or WEBP up to 10MB), AIProdGen preserves the product's geometry, silhouette, and colors while generating studio catalog shots, contextual lifestyle scenes, and conversion-focused marketing copy.
+
+## How the 3-Step Workflow Works
+1. **Upload Raw Product Snapshot**: Users upload a smartphone or desk photo of their product and optionally fill in brand tone, target audience, price position, and USP.
+2. **Select Style & Channel Goal**: Users choose from Photography Packs (Studio White Background, Lifestyle, Luxury Dark), Commerce Launch Packs (Amazon Launch Pack, Shopify Launch Pack), or Campaign Blueprints (strategic ad hypotheses + copy + visuals).
+3. **Review, Upscale & Export**: Outputs are saved to the workspace Content Hub for download in 1:1, 4:5, 9:16, or 16:9 ratios, with optional 4K upscaling.
+
+## Product Fidelity & Quality Guidance
+AIProdGen uses the uploaded product photo as a geometric and color reference. While silhouette, materials, and lighting reflections are preserved cleanly, micro-typography, regulatory nutrition labels, and barcodes should be visually inspected or label-composited before final print runs.
+
+## Security & API Key Architecture (BYOK)
+- User Google Gemini API keys are validated against Google's API and stored server-side using AES-256-GCM encryption (`user_api_keys` table).
+- Keys are never exposed in plain text in browser `localStorage` or client responses.
+- Because compute is BYOK, AIProdGen eliminates the 300%–500% compute markups common in monthly AI photography subscriptions.
+
+## Comparison Summary: AIProdGen vs. Alternatives
+- **12-Month Software Cost**:
+  - AIProdGen Hobbyist Lifetime: $47 one-time (+ ~$19.50 to Google for 500 images).
+  - AIProdGen Pro Founder Lifetime: $97 one-time (+ ~$39 to Google for 1,000 images).
+  - Typical Monthly AI Photo SaaS ($39–$79/mo): $468–$948/year recurring every year.
+  - Traditional Commercial Studio Shoot: $500–$3,000+ per product SKU/shoot with 1–3 week turnaround.
+- **Turnaround Time**: ~8–12 seconds per studio render, or ~30–120 seconds for full multi-shot packs.
+- **Included Copywriting**: Amazon titles, 5-bullet feature lists, Shopify SEO descriptions, and PAS ad hooks are generated alongside visuals.

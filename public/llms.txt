@@ -1,0 +1,30 @@
+# AIProdGen
+
+> AIProdGen is an AI product photography, lifestyle staging, and e-commerce marketing campaign studio. Upload one raw phone snapshot of a product to generate Amazon-ready white-background photos, photorealistic lifestyle scenes, and conversion-focused product copy—with lifetime software access and zero markup on AI compute (Bring Your Own Google Gemini API Key).
+
+Last updated: 2026-11-19
+
+## Core Capabilities
+- **Commercial Product Photography**: Pure white RGB (255, 255, 255) backgrounds, studio softbox lighting, and physically grounded contact shadows formatted for Amazon Seller Central, Shopify, and Google Shopping.
+- **Creative Lifestyle Staging**: Photorealistic architectural, outdoor, and luxury scenes in 1:1 (feed), 9:16 (Reels/TikTok), and 16:9 (hero banners).
+- **Conversion Marketing Copy & Blueprints**: AI-generated Amazon titles, 5-bullet feature lists, Shopify SEO descriptions, and PAS ad hooks.
+- **4K Ultra-HD Upscaling**: Platform credit-based upscaling for high-DPI print and hero catalog visuals.
+
+## Pricing & Business Model (Lifetime + BYOK)
+AIProdGen charges a one-time software license instead of recurring monthly SaaS fees. Users connect their own Google Gemini API key (AES-256-GCM encrypted in their account vault) and pay Google directly at wholesale API rates (~$0.039 per image) with 0% platform markup.
+
+- **Free Explorer**: $0 forever — 20 BYOK generations/month, personal evaluation use (watermarked).
+- **Hobbyist Lifetime**: $47 one-time (or ₹3,999 INR) — 500 BYOK generations/month, no watermarks, full commercial store rights.
+- **Pro Founder Lifetime**: $97 one-time — 3,000 BYOK generations/month, 50 starter 4K upscale credits, Campaign Blueprint & Production Engine, Director Studio + Veo integration.
+- **Agency Lifetime**: $197 one-time — 25,000 BYOK generations/month, 120 starter 4K upscale credits, bulk mode, commercial client-deliverable rights.
+
+## Key Pages & Machine-Readable Resources
+- [Homepage](https://www.aiprodgen.online/): Product overview, interactive category preview, and checkout.
+- [Structured Pricing (Markdown)](https://www.aiprodgen.online/pricing.md): Complete machine-readable tier limits, compute costs, and 4K credit packs.
+- [AIProdGen vs Alternatives Comparison](https://www.aiprodgen.online/compare.html): Cost and capability comparison against monthly AI SaaS tools and traditional studios.
+- [Features](https://www.aiprodgen.online/features.html): Detailed breakdown of studio engines and output formats.
+- [FAQ](https://www.aiprodgen.online/faq.html): Answers on BYOK setup, commercial licensing, and 7-day refund policy.
+- [Community Showcase](https://www.aiprodgen.online/wall.html): Sample generated product visuals.
+- [About](https://www.aiprodgen.online/about.html): Company mission and background.
+- [Contact Support](https://www.aiprodgen.online/contact.html): support@aiprodgen.online.
+- [Full Context File](https://www.aiprodgen.online/llms-full.txt): Extended documentation for AI assistants and agents.
