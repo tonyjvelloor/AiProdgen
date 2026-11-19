@@ -1,8 +1,20 @@
 User-agent: *
 Allow: /
-Allow: /wall.html
 Disallow: /app.html
 Disallow: /dashboard.html
 Disallow: /admin.html
+Disallow: /admin-login.html
+Disallow: /product.html
+Disallow: /photography.html
+Disallow: /commerce.html
+Disallow: /blueprint.html
+Disallow: /production.html
+Disallow: /content-library.html
+Disallow: /creations.html
+Disallow: /asset.html
+Disallow: /creative_testing.html
+Disallow: /ugc.html
+Disallow: /reset-password.html
+Disallow: /api/
 
-Sitemap: https://aiprodgen.online/sitemap.xml
+Sitemap: https://www.aiprodgen.online/sitemap.xml

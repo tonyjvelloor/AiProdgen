@@ -5,6 +5,8 @@
     <script src="/js/referral.js"></script>
     <meta name="google-site-verification" content="3o4XglkD8nxs8-hM0YZMTKnmvx1CwXT1BvbkYq2uJU8" />
     <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="apple-touch-icon" href="/logo.png">
+    <meta name="theme-color" content="#0f172a">
 
     <!-- Meta Pixel Code -->
     <script>
@@ -34,37 +36,154 @@
     <meta name="keywords"
         content="product photography, ecommerce photography, AI product background, amazon product photos, shopify lifestyle photos, product marketing engine, product copywriting">
     <meta name="robots" content="index, follow">
-    <link rel="canonical" href="https://aiprodgen.online/">
+    <link rel="canonical" href="https://www.aiprodgen.online/">
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://aiprodgen.online/">
+    <meta property="og:site_name" content="AIProdGen">
+    <meta property="og:locale" content="en_US">
+    <meta property="og:url" content="https://www.aiprodgen.online/">
     <meta property="og:title" content="AIProdGen — One Product Photo. An Entire Marketing Campaign.">
     <meta property="og:description"
         content="Upload a raw phone snapshot once. Generate studio white-background listings, lifestyle scenes, and conversion-ready copy in seconds.">
-    <meta property="og:image" content="https://aiprodgen.online/aiprodgen-hero.jpg">
+    <meta property="og:image" content="https://www.aiprodgen.online/aiprodgen-hero.jpg">
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image">
-    <meta property="twitter:url" content="https://aiprodgen.online/">
+    <meta property="twitter:url" content="https://www.aiprodgen.online/">
     <meta property="twitter:title" content="AIProdGen — Professional Product Photos & Copy in Seconds">
     <meta property="twitter:description"
         content="Upload raw product shots. Instantly generate white-background catalog shots, lifestyle scenes, and conversion copy.">
-    <meta property="twitter:image" content="https://aiprodgen.online/aiprodgen-hero.jpg">
+    <meta property="twitter:image" content="https://www.aiprodgen.online/aiprodgen-hero.jpg">
 
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "SoftwareApplication",
-      "name": "AIProdGen",
-      "applicationCategory": "DesignApplication",
-      "operatingSystem": "Web",
-      "description": "Studio-grade product photography, lifestyle staging, and campaign asset generator for e-commerce brands.",
-      "offers": {
-        "@type": "Offer",
-        "price": "47.00",
-        "priceCurrency": "USD"
-      }
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://www.aiprodgen.online/#organization",
+          "name": "AIProdGen",
+          "url": "https://www.aiprodgen.online/",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://www.aiprodgen.online/logo.png"
+          },
+          "contactPoint": {
+            "@type": "ContactPoint",
+            "email": "support@aiprodgen.online",
+            "contactType": "customer support"
+          }
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://www.aiprodgen.online/#website",
+          "name": "AIProdGen",
+          "url": "https://www.aiprodgen.online/",
+          "publisher": { "@id": "https://www.aiprodgen.online/#organization" }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://www.aiprodgen.online/#software",
+          "name": "AIProdGen",
+          "url": "https://www.aiprodgen.online/",
+          "applicationCategory": "DesignApplication",
+          "operatingSystem": "Web",
+          "description": "Studio-grade product photography, lifestyle staging, and campaign asset generator for e-commerce brands.",
+          "offers": [
+            {
+              "@type": "Offer",
+              "name": "Free Explorer",
+              "price": "0.00",
+              "priceCurrency": "USD",
+              "availability": "https://schema.org/InStock"
+            },
+            {
+              "@type": "Offer",
+              "name": "Hobbyist Lifetime",
+              "price": "47.00",
+              "priceCurrency": "USD",
+              "availability": "https://schema.org/InStock"
+            },
+            {
+              "@type": "Offer",
+              "name": "Pro Founder Lifetime",
+              "price": "97.00",
+              "priceCurrency": "USD",
+              "availability": "https://schema.org/InStock"
+            },
+            {
+              "@type": "Offer",
+              "name": "Agency Lifetime",
+              "price": "197.00",
+              "priceCurrency": "USD",
+              "availability": "https://schema.org/InStock"
+            }
+          ]
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://www.aiprodgen.online/#faq",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "How does the lifetime plan and monthly allowance work?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Your software license is a permanent one-time purchase with no monthly AIProdGen platform subscription fees. Your monthly generation limit (500 for Hobbyist, 3,000 for Pro, 25,000 for Agency) automatically resets on the 1st of every month for life. Image generation uses your own Google Gemini API key (BYOK)."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What is BYOK (Bring Your Own Key) and what does Google charge?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "BYOK means you connect your own free Google Gemini API key. Instead of paying marked-up subscription rates, you pay Google directly at their raw wholesale price (~$0.039 per image generation). Generating marketing copy and product descriptions is pennies or free under Google's tier."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Do I retain full commercial rights to my generated assets?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. All paid plans (Hobbyist, Pro Founder, and Agency) grant you full commercial rights to use your generated imagery and copywriting across your online store, marketplace listings, social media, and paid advertising. The Agency plan additionally includes commercial client-deliverable rights."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How does AIProdGen preserve my product's logos, text, and shape?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Your uploaded photo is used as a strict geometric reference. AI diffusion maintains the silhouette, materials, and colors of your item while generating clean studio lighting or lifestyle environments. Micro-typography, legal nutrition labels, and barcodes should always be visually inspected before final commercial printing or listing."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Are outputs compliant with Amazon and Shopify requirements?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. The Commercial Photography engine generates pure white RGB (255, 255, 255) backgrounds with clean margins, meeting Amazon's main hero image standards and Shopify catalog specifications."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How do 4K upscale credits work?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Pro Founder includes 50 starter 4K upscale credits, and Agency includes 120 starter credits. These credits do not expire and allow you to upscale images to ultra-high-resolution 4K for print packaging or high-DPI displays."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Can I test the product before buying a lifetime plan?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. You can sign up for the Free Explorer plan with 20 free monthly generations to test the studio, upload photos, and see the output quality firsthand before upgrading."
+              }
+            }
+          ]
+        }
+      ]
     }
     </script>
 
