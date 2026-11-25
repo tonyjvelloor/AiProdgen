@@ -1,4 +1,15 @@
 {
+  "functions": {
+    "api/**/*.js": {
+      "maxDuration": 60
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/ugc/gallery/public",
+      "schedule": "0 4 * * *"
+    }
+  ],
   "redirects": [
     { "source": "/pricing.html", "destination": "/index.html#pricing", "permanent": false },
     { "source": "/landing_vanilla.html", "destination": "/landing.html", "permanent": false }

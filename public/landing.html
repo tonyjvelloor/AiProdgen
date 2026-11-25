@@ -412,14 +412,14 @@
             <p class="text-xs uppercase tracking-wider text-slate-400 font-bold mb-5">
                 Formatted for instant export to major e-commerce platforms & ad channels
             </p>
-            <div class="flex flex-wrap items-center justify-center gap-8 sm:gap-14 text-slate-400 font-bold text-sm sm:text-base">
+            <div class="flex flex-wrap items-center justify-center gap-6 sm:gap-12 text-slate-400 font-bold text-sm sm:text-base">
+                <span class="hover:text-slate-700 transition-colors">Amazon.in &amp; Global</span>
+                <span class="hover:text-slate-700 transition-colors">Flipkart</span>
+                <span class="hover:text-slate-700 transition-colors">Meesho</span>
+                <span class="hover:text-slate-700 transition-colors">Myntra &amp; Ajio</span>
                 <span class="hover:text-slate-700 transition-colors">Shopify</span>
-                <span class="hover:text-slate-700 transition-colors">Amazon Seller Central</span>
-                <span class="hover:text-slate-700 transition-colors">Google Shopping</span>
-                <span class="hover:text-slate-700 transition-colors">Meta Ads (1:1 & 9:16)</span>
-                <span class="hover:text-slate-700 transition-colors">TikTok Shop</span>
-                <span class="hover:text-slate-700 transition-colors">Etsy</span>
-                <span class="hover:text-slate-700 transition-colors">WooCommerce</span>
+                <span class="hover:text-slate-700 transition-colors">Meta Ads (1:1 &amp; 9:16)</span>
+                <span class="hover:text-slate-700 transition-colors">WhatsApp Business</span>
             </div>
         </div>
     </div>
@@ -743,6 +743,18 @@
                 <p class="text-sm sm:text-base text-slate-600">
                     No monthly software subscriptions. Your workspace license is lifetime. Monthly generation limits reset on the 1st of every month.
                 </p>
+
+                <!-- Prominent Currency & UPI Switcher -->
+                <div class="mt-6 inline-flex items-center p-1 rounded-xl bg-slate-200/80 border border-slate-300/70 shadow-inner">
+                    <button type="button" id="pricingBtnUSD" onclick="setCurrency('USD')"
+                        class="px-4 py-2 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm transition">
+                        🇺🇸 USD ($) — International
+                    </button>
+                    <button type="button" id="pricingBtnINR" onclick="setCurrency('INR')"
+                        class="px-4 py-2 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition">
+                        🇮🇳 INR (₹) — UPI, GPay &amp; Cards
+                    </button>
+                </div>
             </div>
 
             <!-- Pricing Grid -->
@@ -845,7 +857,7 @@
                         <div class="mb-4">
                             <span class="text-3xl font-extrabold text-slate-900" data-price-key="pro">$97</span>
                             <span class="text-xs text-slate-500">one-time</span>
-                            <div class="text-[11px] text-slate-400 mt-0.5" id="proAltCurrency">or ~₹8,150 INR ($97 USD checkout)</div>
+                            <div class="text-[11px] text-slate-400 mt-0.5" id="proAltCurrency">or ₹7,999 INR via UPI</div>
                         </div>
                         <p class="text-xs text-slate-500 mb-6">
                             For serious e-commerce brands scaling multiple sales channels.
@@ -891,7 +903,7 @@
                         <div class="mb-4">
                             <span class="text-3xl font-extrabold text-slate-900" data-price-key="agency">$197</span>
                             <span class="text-xs text-slate-500">one-time</span>
-                            <div class="text-[11px] text-slate-400 mt-0.5" id="agencyAltCurrency">or ~₹16,500 INR ($197 USD checkout)</div>
+                            <div class="text-[11px] text-slate-400 mt-0.5" id="agencyAltCurrency">or ₹14,999 INR via UPI</div>
                         </div>
                         <p class="text-xs text-slate-500 mb-6">
                             For agencies and marketing teams managing client deliverables.
@@ -1145,6 +1157,22 @@
                         class="block w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm text-slate-900 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
                         placeholder="founder@yourstore.com">
                 </div>
+
+                <!-- Optional GST Invoice Details for Indian Businesses -->
+                <details class="rounded-lg border border-slate-200 bg-slate-50/70 px-3.5 py-2.5">
+                    <summary class="text-xs font-semibold text-slate-700 cursor-pointer select-none">
+                        Need a GST Tax Invoice? (Optional — India)
+                    </summary>
+                    <div class="mt-3 space-y-2.5">
+                        <input type="text" id="customerCompany" maxlength="120"
+                            class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-brand-600 focus:outline-none"
+                            placeholder="Company / Brand Name (e.g. Vastra Creations Pvt Ltd)">
+                        <input type="text" id="customerGstin" maxlength="15"
+                            class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 uppercase focus:border-brand-600 focus:outline-none"
+                            placeholder="15-digit GSTIN (e.g. 27ABCDE1234F1Z5)">
+                    </div>
+                </details>
+
                 <button type="submit" id="payButton"
                     class="w-full py-3 px-4 rounded-xl font-bold text-sm text-white bg-slate-900 hover:bg-slate-800 shadow transition">
                     Proceed to Payment
@@ -1152,7 +1180,7 @@
             </form>
             <div class="mt-4 text-center text-xs text-slate-400 flex items-center justify-center gap-1.5">
                 <i data-lucide="lock" class="w-3.5 h-3.5 text-slate-400"></i>
-                <span>Encrypted 256-bit checkout powered by Razorpay</span>
+                <span id="checkoutBadgeText">Encrypted 256-bit checkout • UPI, Cards &amp; NetBanking</span>
             </div>
         </div>
     </div>
@@ -1173,8 +1201,8 @@
         const PRICES = {
             free: { USD: 0, INR: 0 },
             offer: { USD: 47, INR: 3999 },
-            pro: { USD: 97, INR: 8150 },
-            agency: { USD: 197, INR: 16500 }
+            pro: { USD: 97, INR: 7999 },
+            agency: { USD: 197, INR: 14999 }
         };
 
         function toggleMobileMenu() {
@@ -1205,10 +1233,14 @@
             }
         }
 
-        function toggleCurrency() {
-            currentCurrency = currentCurrency === 'USD' ? 'INR' : 'USD';
+        function setCurrency(next) {
+            currentCurrency = next === 'INR' ? 'INR' : 'USD';
             updateCurrencyUI();
             localStorage.setItem('preferredCurrency', currentCurrency);
+        }
+
+        function toggleCurrency() {
+            setCurrency(currentCurrency === 'USD' ? 'INR' : 'USD');
         }
 
         function updateCurrencyUI() {
@@ -1217,6 +1249,15 @@
 
             document.getElementById('currencyFlag').textContent = config.flag;
             document.getElementById('currencyCode').textContent = currency;
+
+            const btnUSD = document.getElementById('pricingBtnUSD');
+            const btnINR = document.getElementById('pricingBtnINR');
+            if (btnUSD && btnINR) {
+                const activeCls = 'px-4 py-2 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm transition';
+                const idleCls = 'px-4 py-2 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition';
+                btnUSD.className = currency === 'USD' ? activeCls : idleCls;
+                btnINR.className = currency === 'INR' ? activeCls : idleCls;
+            }
 
             document.querySelectorAll('[data-price-key]').forEach(el => {
                 const key = el.dataset.priceKey;
@@ -1227,15 +1268,15 @@
 
             const altEl = document.getElementById('hobbyistAltCurrency');
             if (altEl) {
-                altEl.textContent = currency === 'INR' ? 'or $47 USD' : 'or ₹3,999 INR';
+                altEl.textContent = currency === 'INR' ? 'UPI / Cards / NetBanking (or $47 USD)' : 'or ₹3,999 INR via UPI';
             }
             const proAltEl = document.getElementById('proAltCurrency');
             if (proAltEl) {
-                proAltEl.textContent = currency === 'INR' ? 'Billed as $97 USD at checkout' : 'or ~₹8,150 INR ($97 USD checkout)';
+                proAltEl.textContent = currency === 'INR' ? 'UPI / Cards / NetBanking (or $97 USD)' : 'or ₹7,999 INR via UPI';
             }
             const agencyAltEl = document.getElementById('agencyAltCurrency');
             if (agencyAltEl) {
-                agencyAltEl.textContent = currency === 'INR' ? 'Billed as $197 USD at checkout' : 'or ~₹16,500 INR ($197 USD checkout)';
+                agencyAltEl.textContent = currency === 'INR' ? 'UPI / GST Invoice supported (or $197 USD)' : 'or ₹14,999 INR via UPI';
             }
         }
 
@@ -1285,10 +1326,13 @@
             }
 
             try {
-                // Hobbyist supports both INR and USD; higher tiers are billed in USD
-                const checkoutCurrency = selectedCheckoutAmount === 47 ? currentCurrency : 'USD';
-                const finalAmount = selectedCheckoutAmount === 47 ? PRICES.offer[checkoutCurrency] : selectedCheckoutAmount;
+                // Every lifetime tier supports both native INR (UPI / GPay / PhonePe / NetBanking) and USD.
+                const checkoutCurrency = currentCurrency === 'INR' ? 'INR' : 'USD';
+                const priceKey = ({ 47: 'offer', 97: 'pro', 197: 'agency' })[selectedCheckoutAmount] || 'offer';
+                const finalAmount = PRICES[priceKey][checkoutCurrency];
                 const planId = ({ 47: 'hobbyist_ltd', 97: 'pro_founder_ltd', 197: 'agency_ltd' })[selectedCheckoutAmount];
+                const gstin = (document.getElementById('customerGstin')?.value || '').trim().toUpperCase();
+                const companyName = (document.getElementById('customerCompany')?.value || '').trim();
                 const token = localStorage.getItem('token');
                 const existingUser = !!token;
                 const response = await fetch(existingUser ? '/api/plan/subscribe' : '/api/payment/create-order', {
@@ -1298,7 +1342,9 @@
                         email,
                         amount: finalAmount,
                         currency: checkoutCurrency,
-                        planId
+                        planId,
+                        ...(gstin ? { gstin } : {}),
+                        ...(companyName ? { companyName } : {})
                     })
                 });
 

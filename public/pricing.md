@@ -22,22 +22,22 @@ Refund Policy: 7-day money-back guarantee (https://www.aiprodgen.online/refund-p
 - Included Features: Marketplace white-background packs, lifestyle staging packs, AI copywriting
 
 ### Pro Founder Lifetime (Most Popular)
-- Price: $97 one-time (billed in USD)
+- Price: $97 USD or ₹7,999 INR one-time (UPI, Cards & NetBanking supported)
 - Monthly Generation Allowance: 3,000 BYOK generations/month (resets on the 1st of every month)
 - Included 4K Upscale Credits: 50 starter credits (one-time starter pack, non-expiring)
 - Included UGC Credits: 10 starter credits
 - Output Watermark: None
 - Commercial License: Yes (full commercial rights for your brand)
-- Included Features: Campaign Blueprint & Review Engine, Campaign Production, Director Studio + Veo integration, advanced templates
+- Included Features: Amazon.in/Flipkart/Meesho/Myntra packs, Indian Model & Festive Studio, Campaign Blueprint & Review Engine, Director Studio + Veo integration, optional GSTIN invoice capture
 
 ### Agency Lifetime
-- Price: $197 one-time (billed in USD)
+- Price: $197 USD or ₹14,999 INR one-time (UPI, Cards, NetBanking & GST Invoice supported)
 - Monthly Generation Allowance: 25,000 BYOK generations/month (resets on the 1st of every month)
 - Included 4K Upscale Credits: 120 starter credits (one-time starter pack, non-expiring)
 - Included UGC Credits: 50 starter credits
 - Output Watermark: None
 - Commercial License: Yes + Commercial Client Deliverable Rights (Agency Operating License)
-- Included Features: Bulk production mode, priority processing, all Pro Founder features
+- Included Features: Bulk production mode, priority processing, GST tax invoice details at checkout, all Pro Founder features
 
 ## Underlying AI Compute Costs (BYOK — Paid Directly to Google)
 - Who bills image generation: Google Cloud / Google AI Studio directly via user's encrypted Gemini API key.

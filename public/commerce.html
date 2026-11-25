@@ -259,9 +259,8 @@
             document.getElementById('packTime').textContent = pack.estimated_time;
             document.getElementById('packCost').textContent = `${pack.cost} Credits`;
             
-            // Note: For a real app, the backend would send a count of image vs copy shots. We'll approximate here or just use static logic.
-            const imagesCount = pack.id === 'amazon' ? 5 : 1;
-            const copyCount = pack.id === 'amazon' ? 3 : 6;
+            const imagesCount = typeof pack.imagesCount === 'number' ? pack.imagesCount : (pack.id === 'amazon' ? 5 : 1);
+            const copyCount = typeof pack.copyCount === 'number' ? pack.copyCount : (pack.id === 'amazon' ? 3 : 6);
 
             document.getElementById('packImagesCount').textContent = imagesCount;
             document.getElementById('packCopyCount').textContent = copyCount;

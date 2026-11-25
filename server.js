@@ -734,9 +734,9 @@ function shouldUpgradePlan(currentPlan, targetPlan) {
 }
 
 const PLAN_PRICES = {
-    hobbyist_ltd: { onetime_usd: 4900 },  // $49
-    pro_founder_ltd: { onetime_usd: 9700 },  // $97
-    agency_ltd: { onetime_usd: 19700 }   // $197
+    hobbyist_ltd: { onetime_usd: 4900, onetime_inr: 399900 },     // $49 / ₹3,999
+    pro_founder_ltd: { onetime_usd: 9700, onetime_inr: 799900 },  // $97 / ₹7,999
+    agency_ltd: { onetime_usd: 19700, onetime_inr: 1499900 }      // $197 / ₹14,999
 };
 
 // Prices the lifetime-deal checkout is allowed to charge, per currency.
@@ -763,9 +763,11 @@ const LIFETIME_OFFER_PRICES = {
 // product; tests/payment-integrity.test.js guards that invariant.
 function planForOrder(order) {
     if (!order) return null;
-    if (order.currency === 'INR' && Number(order.amount) === 399900) return 'hobbyist_ltd';
-    if (order.currency !== 'USD') return null;
     const amount = Number(order.amount);
+    if (order.currency === 'INR') {
+        return Object.keys(PLAN_PRICES).find(id => PLAN_PRICES[id].onetime_inr === amount) || null;
+    }
+    if (order.currency !== 'USD') return null;
     if (amount === 4700) return 'hobbyist_ltd';
     return Object.keys(PLAN_PRICES).find(id => PLAN_PRICES[id].onetime_usd === amount) || null;
 }
@@ -1118,7 +1120,7 @@ app.post('/api/plan/subscribe', auth.requireAuth, async (req, res) => {
             return res.status(500).json({ error: 'Razorpay not configured' });
         }
 
-        const { planId: rawPlanId, currency = 'USD' } = req.body;
+        const { planId: rawPlanId, currency = 'USD', gstin, companyName } = req.body;
         const billingCycle = 'lifetime';
 
         // app.html sends the display aliases ('creator', 'pro', 'agency') that
@@ -1134,18 +1136,16 @@ app.post('/api/plan/subscribe', auth.requireAuth, async (req, res) => {
             return res.status(400).json({ error: 'Invalid plan. Choose creator, pro, or agency.' });
         }
 
-        // PLAN_PRICES only defines a one-time USD price for these lifetime
-        // plans -- there is no monthly/yearly split and no INR price on record.
-        // The old code built the key as `${billingCycle}_${currency}` (e.g.
-        // "monthly_inr"), which can never match `onetime_usd`, so this always
-        // failed too. Rather than invent an INR conversion that isn't this
-        // code's decision to make, charge the real USD price and say so.
-        const useCurrency = currency === 'INR' && planId === 'hobbyist_ltd' ? 'INR' : 'USD';
-        const amount = useCurrency === 'INR' ? 399900 : prices.onetime_usd;
+        // Support native INR (enabling UPI, NetBanking & domestic cards) on every lifetime plan.
+        const useCurrency = currency === 'INR' && prices.onetime_inr ? 'INR' : 'USD';
+        const amount = useCurrency === 'INR' ? prices.onetime_inr : prices.onetime_usd;
 
         if (!amount) {
             return res.status(400).json({ error: 'This plan has no price configured.' });
         }
+
+        const cleanGstin = typeof gstin === 'string' ? gstin.trim().toUpperCase().slice(0, 15) : '';
+        const cleanCompany = typeof companyName === 'string' ? companyName.trim().slice(0, 120) : '';
 
         const order = await razorpay.orders.create({
             amount: amount,
@@ -1156,7 +1156,9 @@ app.post('/api/plan/subscribe', auth.requireAuth, async (req, res) => {
                 plan: planId,
                 billing_cycle: billingCycle,
                 email: req.user.email,
-                userId: req.user.userId || req.user.id
+                userId: req.user.userId || req.user.id,
+                ...(cleanGstin ? { gstin: cleanGstin } : {}),
+                ...(cleanCompany ? { company_name: cleanCompany } : {})
             }
         });
         await db.createPendingOrder(order.id, req.user.email, amount, useCurrency);
@@ -2079,14 +2081,17 @@ app.post('/api/payment/create-order', async (req, res) => {
             return res.status(500).json({ error: 'Payment system not configured' });
         }
 
-        const { email, amount, currency = 'USD' } = req.body;
+        const { email, amount, currency = 'USD', gstin, companyName } = req.body;
 
         if (!email) {
             return res.status(400).json({ error: 'Email is required' });
         }
 
         // The client does not get to name its own price.
-        const allowed = currency === 'USD' ? [...LIFETIME_OFFER_PRICES.USD, 97, 197] : LIFETIME_OFFER_PRICES[currency];
+        // Every lifetime plan supports both USD and native INR (UPI / NetBanking / domestic cards).
+        const allowed = currency === 'USD'
+            ? [...LIFETIME_OFFER_PRICES.USD, 97, 197]
+            : (currency === 'INR' ? [...LIFETIME_OFFER_PRICES.INR, 7999, 14999] : LIFETIME_OFFER_PRICES[currency]);
         if (!allowed) {
             return res.status(400).json({ error: `Unsupported currency: ${currency}` });
         }
@@ -2106,6 +2111,8 @@ app.post('/api/payment/create-order', async (req, res) => {
         const amountValue = amount !== undefined ? Number(amount) : allowed[0];
         const amountInSmallestUnit = Math.round(amountValue * 100);
         const planId = planForOrder({ amount: amountInSmallestUnit, currency }) || 'hobbyist_ltd';
+        const cleanGstin = typeof gstin === 'string' ? gstin.trim().toUpperCase().slice(0, 15) : '';
+        const cleanCompany = typeof companyName === 'string' ? companyName.trim().slice(0, 120) : '';
 
         const order = await razorpay.orders.create({
             amount: amountInSmallestUnit,
@@ -2114,7 +2121,9 @@ app.post('/api/payment/create-order', async (req, res) => {
             notes: {
                 type: 'acquisition_lifetime',
                 plan: planId,
-                email
+                email,
+                ...(cleanGstin ? { gstin: cleanGstin } : {}),
+                ...(cleanCompany ? { company_name: cleanCompany } : {})
             }
         });
 
